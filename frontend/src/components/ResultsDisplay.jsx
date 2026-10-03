@@ -15,16 +15,17 @@ import { ScanExportButton } from './ScanExportPDF';
 import { useI18n } from '../i18n';
 
 // ── Overall Severity Banner ─────────────────────────────────────
-function SeverityBanner({ results, drugs = [] }) {
+function SeverityBanner({ results, drugs = [], contextFindings = [] }) {
   const { t, lang } = useI18n();
   const { interactions, drugFlags, confidenceScore, overallSeverity } = results;
-  const criticalCount = interactions.filter(i => i.severity.label === 'Critical').length;
-  const moderateCount = interactions.filter(i => i.severity.label === 'Moderate').length;
-  const minorCount = interactions.filter(i => i.severity.label === 'Minor' || i.severity.label === 'Unknown').length;
+  const ctx = (sev) => contextFindings.filter((f) => f.severity === sev).length;
+  const criticalCount = interactions.filter(i => i.severity.label === 'Critical').length + ctx('critical');
+  const moderateCount = interactions.filter(i => i.severity.label === 'Moderate').length + ctx('moderate');
+  const minorCount = interactions.filter(i => i.severity.label === 'Minor' || i.severity.label === 'Unknown').length + ctx('minor') + ctx('unknown');
 
   const isCritical = overallSeverity?.label === 'Critical';
   const isModerate = overallSeverity?.label === 'Moderate';
-  const isClear = interactions.length === 0;
+  const isClear = interactions.length === 0 && contextFindings.length === 0;
 
   const bannerBg = isCritical
     ? 'bg-red-50 border-red-300'
@@ -69,6 +70,15 @@ function SeverityBanner({ results, drugs = [] }) {
               <span className="font-semibold text-slate-900">{interactions.length}</span>{' '}
               {t.results.interactionsInline}
             </span>
+            {contextFindings.length > 0 && (
+              <>
+                <span className="text-slate-300">·</span>
+                <span className="text-[13px] text-slate-600">
+                  <span className="font-semibold text-slate-900">{contextFindings.length}</span>{' '}
+                  {t.results.contextInline}
+                </span>
+              </>
+            )}
             {criticalCount > 0 && (
               <>
                 <span className="text-slate-300">·</span>
@@ -544,8 +554,8 @@ function ResultsActionBar({ results, patientInfo, drugs, species, lang, t }) {
           onClick={() => {
             const subject = encodeURIComponent(
               lang === 'ko'
-                ? `NUVOVET DUR 보고서 — ${patientInfo?.name || '환자'}`
-                : `NUVOVET DUR Report — ${patientInfo?.name || 'Patient'}`
+                ? `nuvovet DUR 보고서 — ${patientInfo?.name || '환자'}`
+                : `nuvovet DUR Report — ${patientInfo?.name || 'Patient'}`
             );
             const body = encodeURIComponent(
               lang === 'ko'
@@ -564,39 +574,86 @@ function ResultsActionBar({ results, patientInfo, drugs, species, lang, t }) {
   );
 }
 
+// ── Patient-context checks (from the nuvovet DUR island) ─────────
+// Allergy, drug–disease, dose-range, species and organ-load findings that
+// sit outside the pairwise interaction matrix.
+const CONTEXT_SEVERITY = { critical: 'Critical', moderate: 'Moderate', minor: 'Minor', unknown: 'Unknown' };
+const CONTEXT_SCORE = { critical: 100, moderate: 50, unknown: 30, minor: 20 };
+
+function ContextFindings({ findings }) {
+  const { t } = useI18n();
+  return (
+    <div>
+      <h3 className="typo-section-header mb-3">{t.results.contextChecks}</h3>
+      <div className="space-y-2">
+        {findings.map((f) => (
+          <div
+            key={f.id}
+            className={`rounded-xl border bg-white px-4 py-3 shadow-sm ${f.reviewed ? 'opacity-60' : ''} ${
+              f.severity === 'critical' ? 'border-red-200 border-l-[3px] border-l-red-500' : f.severity === 'moderate' ? 'border-amber-200 border-l-[3px] border-l-amber-400' : 'border-slate-200'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="typo-drug-name text-[14px]">{f.title}</p>
+                {f.drugsLabel && <p className="typo-label mt-0.5">{f.drugsLabel}</p>}
+              </div>
+              <SeverityBadge severity={{ label: CONTEXT_SEVERITY[f.severity] || 'Unknown' }} />
+            </div>
+            {f.summary && <p className="typo-body mt-2">{f.summary}</p>}
+            {f.suggestion && (
+              <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[12.5px] font-medium text-slate-700 ring-1 ring-inset ring-slate-100">{f.suggestion}</p>
+            )}
+            {f.reviewed && <p className="mt-2 text-[11px] font-medium text-emerald-600">{t.results.reviewed}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Results Display ────────────────────────────────────────
-export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, isFullSystem = false, drugs = [], species = 'dog', onUpdatePatientRecord }) {
+export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, isFullSystem = false, drugs = [], species = 'dog', onUpdatePatientRecord, embedded = false, contextFindings = [] }) {
   const { t, lang } = useI18n();
+
+  // Hooks run unconditionally (rules of hooks) — the empty-state return comes after.
+  const [acknowledged, setAcknowledged] = useState({});
+  const [noted, setNoted] = useState({});
+  const [showScanBar, setShowScanBar] = useState(false);
+  const interactionCount = results?.interactions?.length || 0;
+  const acknowledgedCount = Object.values(acknowledged).filter(Boolean).length;
+  const notedCount = Object.values(noted).filter(Boolean).length;
+  const allReviewed = interactionCount > 0 && (acknowledgedCount + notedCount) >= interactionCount;
+
+  useEffect(() => {
+    if (allReviewed && !embedded) {
+      const timer = setTimeout(() => setShowScanBar(true), 300);
+      return () => clearTimeout(timer);
+    }
+    setShowScanBar(false);
+    return undefined;
+  }, [allReviewed, embedded]);
+
   if (!results) return null;
 
   const { interactions, drugFlags, speciesNotes } = results;
   const hasInteractions = interactions.length > 0;
+  const ctxScore = contextFindings.reduce((m, f) => Math.max(m, CONTEXT_SCORE[f.severity] || 0), 0);
+  const bannerResults = ctxScore > (results.overallSeverity?.score || 0)
+    ? { ...results, overallSeverity: { label: CONTEXT_SEVERITY[contextFindings.find((f) => CONTEXT_SCORE[f.severity] === ctxScore)?.severity] || 'Unknown', score: ctxScore } }
+    : results;
   const flaggedDrugs = drugFlags.filter(f => f.flags.length > 0 || f.speciesNote);
-
-  const [acknowledged, setAcknowledged] = useState({});
-  const [noted, setNoted] = useState({});
-  const acknowledgedCount = Object.values(acknowledged).filter(Boolean).length;
-  const notedCount = Object.values(noted).filter(Boolean).length;
-  const allReviewed = interactions.length > 0 && (acknowledgedCount + notedCount) >= interactions.length;
-  const [showScanBar, setShowScanBar] = useState(false);
-
-  useEffect(() => {
-    if (allReviewed) {
-      const timer = setTimeout(() => setShowScanBar(true), 300);
-      return () => clearTimeout(timer);
-    } else {
-      setShowScanBar(false);
-    }
-  }, [allReviewed]);
 
   return (
     <>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 animate-fade-in">
         {/* Header */}
         <div className="flex items-center gap-3 mb-5 no-print">
-          <button onClick={onBack} className="p-2 -ml-2 text-slate-400 hover:text-slate-600 transition-colors shrink-0">
-            <ArrowLeft size={18} />
-          </button>
+          {!embedded && (
+            <button onClick={onBack} className="p-2 -ml-2 text-slate-400 hover:text-slate-600 transition-colors shrink-0">
+              <ArrowLeft size={18} />
+            </button>
+          )}
           <div className="min-w-0">
             <h2 className="typo-page-title">{t.results.durReport}</h2>
             <p className="typo-label mt-0.5">
@@ -620,15 +677,17 @@ export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, is
         <div className="flex flex-col lg:flex-row gap-5">
           {/* Left sidebar — patient summary */}
           <div className="w-full lg:w-72 xl:w-80 lg:shrink-0">
-            <div className="lg:sticky lg:top-20">
+            <div className={`lg:sticky ${embedded ? 'lg:top-4' : 'lg:top-20'}`}>
               <PatientSummaryPanel results={results} patientInfo={patientInfo} drugs={drugs} species={species} />
             </div>
           </div>
 
           {/* Right main content */}
           <div className="flex-1 min-w-0 space-y-5">
-            {/* Prominent severity banner */}
-            <SeverityBanner results={results} drugs={drugs} />
+            {/* Prominent severity banner — overall severity includes patient-context findings */}
+            <SeverityBanner results={bannerResults} drugs={drugs} contextFindings={contextFindings} />
+
+            {contextFindings.length > 0 && <ContextFindings findings={contextFindings} />}
 
             {hasInteractions ? (
               <div>
@@ -692,7 +751,7 @@ export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, is
               t={t}
             />
 
-            <div className="flex gap-3 no-print flex-wrap">
+            {!embedded && <div className="flex gap-3 no-print flex-wrap">
               <button onClick={onBack} className="flex-1 px-4 py-2.5 text-[13px] font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">{t.results.backToMeds}</button>
               {onUpdatePatientRecord && (
                 <button
@@ -704,7 +763,7 @@ export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, is
                 </button>
               )}
               <button onClick={onNewAnalysis} className="flex-1 px-4 py-2.5 text-[13px] font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors shadow-sm">{t.results.newAnalysis}</button>
-            </div>
+            </div>}
 
             <p className="text-[11px] text-slate-400 text-center leading-relaxed pt-1">
               {t.results.disclaimer}

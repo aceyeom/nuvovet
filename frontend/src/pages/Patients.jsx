@@ -4,7 +4,7 @@ import {
   ArrowLeft, Search, ChevronDown, ChevronUp, Edit2, Trash2,
   Plus, Clock, AlertTriangle, CheckCircle, Zap, User,
 } from 'lucide-react';
-import { NuvovetWordmark } from '../components/NuvovetLogo';
+import { ProductLockup } from '../components/NuvovetLogo';
 import { useI18n, LangToggle } from '../i18n';
 import {
   getAllPatients,
@@ -252,23 +252,22 @@ export default function Patients() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="flex min-h-screen flex-col bg-[#f7f8fa]">
 
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-[0_1px_3px_rgba(15,23,42,0.07)]">
-        <div className="px-4 sm:px-6 h-[58px] flex items-center gap-3">
+      <header className="sticky top-0 z-30 border-b border-ink-200/70 bg-white/90 backdrop-blur">
+        <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-6">
           <button
             onClick={() => navigate('/system')}
-            className="p-2 -ml-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
+            aria-label={t.back}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900"
           >
             <ArrowLeft size={18} />
           </button>
-          <div className="flex items-center gap-2">
-            <NuvovetWordmark />
-            <span className="hidden sm:inline text-xs text-slate-400 font-medium bg-slate-100 px-2 py-0.5 rounded-full">
-              환자 목록 / Patients
-            </span>
-          </div>
+          <ProductLockup product="dur" size="sm" />
+          <span className="hidden rounded-full bg-ink-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-ink-600 sm:inline">
+            {t.fullSystemLabel} · {t.fullSystem.patientsNav}
+          </span>
           <div className="ml-auto flex items-center gap-2">
             <LangToggle />
           </div>

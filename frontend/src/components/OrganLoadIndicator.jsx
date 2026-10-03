@@ -11,7 +11,7 @@ import { useI18n } from '../i18n';
  * Removed: accordion/collapse toggle (Task 5)
  */
 
-function getOrganLoads(drugs, species) {
+export function getOrganLoads(drugs, species) {
   let renalLoad = 0;
   let hepaticLoad = 0;
   const contributions = [];
@@ -62,7 +62,7 @@ function getOrganLoads(drugs, species) {
   };
 }
 
-function getRenalRisk(renalPct, elevatedCreatinine) {
+export function getRenalRisk(renalPct, elevatedCreatinine) {
   if (elevatedCreatinine && renalPct >= 40)
     return { level: 'critical', label: 'Critical', bar: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50 border-red-200' };
   if (renalPct >= 120)

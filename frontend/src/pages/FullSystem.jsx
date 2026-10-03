@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Lock, Eye, EyeOff, Zap, RotateCcw,
+  ArrowLeft, ArrowRight, Lock, Eye, EyeOff, Zap, RotateCcw,
   ChevronDown, ChevronUp, Plus, X, Camera, Users, Save,
-  CheckCircle, AlertCircle,
+  CheckCircle, AlertCircle, Check,
 } from 'lucide-react';
-import { NuvovetWordmark } from '../components/NuvovetLogo';
+import { ProductLockup } from '../components/NuvovetLogo';
 import { useI18n, LangToggle } from '../i18n';
 import { DrugInput } from '../components/DrugInput';
 import { AnalysisScreen } from '../components/AnalysisScreen';
@@ -185,6 +185,19 @@ function BreedInput({ value, onChange, species }) {
   );
 }
 
+// ── Numbered section header (patient → prescription → run) ──────
+function StepHeader({ n, title, hint }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-900 font-mono text-[12px] font-semibold text-white tnum">{n}</span>
+      <div>
+        <h2 className="text-[15.5px] font-bold tracking-[-0.01em] text-ink-900">{title}</h2>
+        <p className="mt-0.5 text-[13px] text-ink-400">{hint}</p>
+      </div>
+    </div>
+  );
+}
+
 // ── Password Gate ─────────────────────────────────────────────────
 function PasswordGate({ onAuthenticate }) {
   const { t } = useI18n();
@@ -204,63 +217,87 @@ function PasswordGate({ onAuthenticate }) {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <header className="bg-white border-b border-slate-200 shadow-[0_1px_3px_rgba(15,23,42,0.07)]">
-        <div className="max-w-5xl mx-auto px-6 h-[62px] flex items-center gap-3">
+    <div className="flex min-h-screen flex-col bg-[#f7f8fa] lg:flex-row">
+      {/* Brand panel — what this workspace is (vs. the public demo) */}
+      <aside className="relative overflow-hidden bg-ink-950 px-6 py-8 text-white sm:px-10 lg:flex lg:w-[46%] lg:flex-col lg:justify-between lg:py-12">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-clinical-grid-dark mask-radial-fade" />
+        <div aria-hidden="true" className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-dur-500/25 blur-3xl" />
+        <div className="relative flex items-center justify-between">
           <button
+            type="button"
             onClick={() => navigate('/')}
-            className="p-2 -ml-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
+            aria-label={t.back}
+            className="-ml-2 flex h-9 w-9 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white"
           >
             <ArrowLeft size={18} />
           </button>
-          <NuvovetWordmark />
+          <LangToggle className="bg-white/10 ring-white/10 [&_button]:text-white/60 [&_button[aria-pressed=true]]:text-ink-900" />
         </div>
-      </header>
-      <main className="flex-1 flex items-center justify-center px-6 pb-16">
-        <div className="max-w-sm w-full text-center">
-          <div className="mx-auto w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-6">
-            <Lock size={24} className="text-slate-500" />
+        <div className="relative mt-8 lg:mt-0">
+          <ProductLockup product="dur" size="lg" tone="dark" />
+          <p className="mt-6 text-[12px] font-semibold uppercase tracking-[0.12em] text-dur-300">{t.fullSystem.gateKicker}</p>
+          <h1 className="mt-2 max-w-md text-balance text-[28px] font-bold leading-tight tracking-[-0.03em] sm:text-[34px]">{t.fullSystem.gateTitle}</h1>
+          <ul className="mt-6 hidden space-y-3 sm:block">
+            {t.fullSystem.gatePoints.map((p) => (
+              <li key={p} className="flex items-start gap-2.5 text-[14px] text-white/70">
+                <span className="mt-[3px] flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-dur-500/20 text-dur-300">
+                  <Check size={11} strokeWidth={3} />
+                </span>
+                {p}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="relative mt-8 hidden text-[12px] text-white/35 lg:block">{t.landing.footerDisclaimer}</p>
+      </aside>
+
+      {/* Sign-in */}
+      <main className="flex flex-1 items-center justify-center px-5 py-10 sm:px-8">
+        <div className="w-full max-w-sm">
+          <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-ink-700 shadow-card ring-1 ring-ink-900/5">
+            <Lock size={20} />
           </div>
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">{t.fullSystem.accessTitle}</h2>
-          <p className="text-sm text-slate-500 mb-8">{t.fullSystem.accessDesc}</p>
+          <h2 className="text-[22px] font-bold tracking-[-0.02em] text-ink-900">{t.fullSystem.accessTitle}</h2>
+          <p className="mb-7 mt-1.5 text-[14px] leading-relaxed text-ink-500">{t.fullSystem.accessDesc}</p>
           <form onSubmit={handleSubmit} className="space-y-3">
+            <label htmlFor="access-code" className="sr-only">{t.fullSystem.passwordPlaceholder}</label>
             <div className="relative">
               <input
+                id="access-code"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={t.fullSystem.passwordPlaceholder}
-                className={`w-full px-4 py-3 text-sm border rounded-lg focus:outline-none focus:ring-2 transition-all pr-10 ${
-                  error
-                    ? 'border-red-300 focus:ring-red-100 bg-red-50'
-                    : 'border-slate-200 focus:ring-slate-900/10 focus:border-slate-300'
+                className={`h-12 w-full rounded-xl border bg-white px-4 pr-11 text-[16px] transition-all focus:outline-none focus:ring-4 sm:text-sm ${
+                  error ? 'border-red-300 bg-red-50 focus:ring-red-100' : 'border-ink-200 focus:border-ink-300 focus:ring-ink-900/5'
                 }`}
                 autoFocus
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label={showPassword ? 'Hide' : 'Show'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600"
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
-            {error && (
-              <p className="text-xs text-red-500">{t.fullSystem.invalidPassword}</p>
-            )}
-            <button
-              type="submit"
-              className="w-full px-4 py-3 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-all duration-200"
-            >
+            {error && <p className="text-xs text-red-500" role="alert">{t.fullSystem.invalidPassword}</p>}
+            <button type="submit" className="h-12 w-full rounded-full bg-ink-900 text-[14.5px] font-semibold text-white transition-colors hover:bg-ink-800">
               {t.fullSystem.enterSystem}
             </button>
           </form>
-          <button
-            onClick={() => navigate('/demo')}
-            className="mt-6 text-xs text-slate-400 hover:text-slate-600 transition-colors"
-          >
-            {t.fullSystem.tryDemoInstead}
-          </button>
+          <div className="mt-8 rounded-2xl bg-white p-4 ring-1 ring-ink-200/70">
+            <p className="text-[13px] font-semibold text-ink-800">{t.fullSystem.noCodeTitle}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={() => navigate('/demo')} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-dur-50 px-3.5 text-[13px] font-semibold text-dur-700 ring-1 ring-inset ring-dur-200 hover:bg-dur-100">
+                {t.nav.demo} <ArrowRight size={13} />
+              </button>
+              <button type="button" onClick={() => navigate('/')} className="inline-flex h-9 items-center rounded-full px-3.5 text-[13px] font-semibold text-ink-600 ring-1 ring-inset ring-ink-200 hover:bg-ink-50">
+                {t.fullSystem.requestCode}
+              </button>
+            </div>
+          </div>
         </div>
       </main>
     </div>
@@ -512,29 +549,28 @@ export default function FullSystem() {
 
   // ── Render ────────────────────────────────────────────────────
   return (
-    <div className="h-screen flex flex-col bg-white overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f7f8fa]">
 
       {/* Sticky Header */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-[0_1px_3px_rgba(15,23,42,0.07)] shrink-0">
-        <div className="px-4 sm:px-6 h-[58px] flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 shrink-0 border-b border-ink-200/70 bg-white/90 backdrop-blur">
+        <div className="flex h-14 items-center justify-between gap-3 px-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <button
               onClick={() => navigate('/')}
-              className="p-2 -ml-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
+              aria-label={t.back}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900"
             >
               <ArrowLeft size={18} />
             </button>
-            <div className="flex items-center gap-2">
-              <NuvovetWordmark />
-              <span className="hidden sm:inline text-xs text-slate-400 font-medium bg-slate-100 px-2 py-0.5 rounded-full">
-                {t.fullSystemLabel}
-              </span>
-            </div>
+            <ProductLockup product="dur" size="sm" />
+            <span className="hidden rounded-full bg-ink-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-ink-600 sm:inline">
+              {t.fullSystemLabel}
+            </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => navigate('/patients')}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-colors"
+              className="hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900 sm:flex"
             >
               <Users size={14} />
               {t.fullSystem.patientsNav}
@@ -543,21 +579,22 @@ export default function FullSystem() {
             {step === 'input' && (drugs.length > 0 || patientName) && (
               <button
                 onClick={handleReset}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
                 title={t.reset}
+                aria-label={t.reset}
               >
                 <RotateCcw size={14} />
               </button>
             )}
             {isConnected ? (
-              <span className="text-[11px] px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-full font-semibold flex items-center gap-1.5 border border-emerald-100">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+              <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
                 {t.connected}
               </span>
             ) : (
-              <span className="text-[11px] px-2.5 py-1 bg-slate-100 text-slate-500 rounded-full font-semibold flex items-center gap-1.5 border border-slate-200">
-                <span className="w-1.5 h-1.5 bg-slate-400 rounded-full" />
-                Offline
+              <span className="flex items-center gap-1.5 rounded-full bg-ink-100 px-2.5 py-1 text-[11px] font-semibold text-ink-500 ring-1 ring-inset ring-ink-200" title={t.fullSystem.offlineHint}>
+                <span className="h-1.5 w-1.5 rounded-full bg-ink-400" />
+                {t.fullSystem.offline}
               </span>
             )}
           </div>
@@ -597,14 +634,11 @@ export default function FullSystem() {
         {/* INPUT */}
         {step === 'input' && (
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-xl mx-auto px-4 py-8 space-y-8">
+            <div className="mx-auto max-w-xl space-y-4 px-3 py-6 sm:px-4 sm:py-8">
 
               {/* ── SECTION 1: PATIENT DETAILS ───────────────────────── */}
-              <div className="space-y-5">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900">{t.fullSystem.sectionPatient}</h2>
-                  <p className="text-[13px] text-slate-400 mt-0.5">{t.fullSystem.sectionPatientHint}</p>
-                </div>
+              <section className="space-y-5 rounded-2xl bg-white p-5 shadow-card ring-1 ring-ink-900/[0.06] sm:p-6">
+                <StepHeader n={1} title={t.fullSystem.sectionPatient} hint={t.fullSystem.sectionPatientHint} />
 
                 {/* EMR Import — prominent secondary action at top */}
                 <button
@@ -875,17 +909,11 @@ export default function FullSystem() {
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* ── DIVIDER ──────────────────────────────────────────── */}
-              <div className="border-t border-slate-100" />
+              </section>
 
               {/* ── SECTION 2: DRUG PRESCRIPTION ─────────────────────── */}
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900">{t.fullSystem.sectionDrugs}</h2>
-                  <p className="text-[13px] text-slate-400 mt-0.5">{t.fullSystem.sectionDrugsHint}</p>
-                </div>
+              <section className="space-y-4 rounded-2xl bg-white p-5 shadow-card ring-1 ring-ink-900/[0.06] sm:p-6">
+                <StepHeader n={2} title={t.fullSystem.sectionDrugs} hint={t.fullSystem.sectionDrugsHint} />
 
                 <DrugInput
                   drugs={drugs}
@@ -896,13 +924,11 @@ export default function FullSystem() {
                   weight={weightNum}
                   searchFn={searchDrugsApi}
                 />
-              </div>
-
-              {/* ── DIVIDER ──────────────────────────────────────────── */}
-              <div className="border-t border-slate-100" />
+              </section>
 
               {/* ── SECTION 3: RUN DUR ───────────────────────────────── */}
-              <div className="space-y-4 pb-8">
+              <section className="space-y-4 rounded-2xl bg-white p-5 shadow-card ring-1 ring-ink-900/[0.06] sm:p-6">
+                <StepHeader n={3} title={t.fullSystem.sectionRun} hint={t.fullSystem.sectionRunHint} />
                 {/* Save patient checkbox */}
                 <label className="flex items-center gap-3 cursor-pointer group">
                   <input
@@ -919,7 +945,7 @@ export default function FullSystem() {
                 <button
                   onClick={handleRunAnalysis}
                   disabled={!canRun}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-4 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+                  className="flex w-full items-center justify-center gap-2 rounded-full bg-ink-900 px-4 py-4 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Zap size={15} />
                   {t.fullSystem.runDurCheck}
@@ -934,7 +960,8 @@ export default function FullSystem() {
                     {t.fullSystem.runDurDisabledHint}
                   </p>
                 )}
-              </div>
+              </section>
+              <div className="h-6" />
 
             </div>
           </div>

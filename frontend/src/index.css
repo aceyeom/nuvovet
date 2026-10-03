@@ -2,22 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Design tokens (non-colour) ───────────────────────────────────
+   Colours live in tailwind.config.js. These variables cover motion
+   and surfaces that are easier to express in plain CSS.            */
+:root {
+  /* Spring curve (ζ≈0.72) for the DUR island morph — sampled damped
+     oscillator, ~4% overshoot. Falls back to an ease-out-back curve. */
+  --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --canvas: #f6f8fa;
+}
+
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(0, 0.04, 0.138, 0.266, 0.403, 0.536, 0.657, 0.76, 0.844, 0.911, 0.96, 0.995, 1.017, 1.031, 1.037, 1.038, 1.036, 1.032, 1.027, 1.022, 1.017, 1.012, 1.009, 1.005, 1.003, 1.001, 1, 0.999, 0.999, 1);
+  }
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-body {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #ffffff;
-  color: #0f172a;
-}
-
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'ss06' 1; /* Pretendard: disambiguated l / I */
+  background-color: #ffffff;
+  color: #0b1220;
 }
 
 html, body, #root {
@@ -25,59 +45,153 @@ html, body, #root {
   width: 100%;
 }
 
+/* Korean text should wrap on words, not mid-syllable */
+:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
 /* ── Typography hierarchy ──────────────────────────────────────── */
 
 .typo-page-title {
-  font-family: 'DM Sans', system-ui, sans-serif;
   font-size: 22px;
-  font-weight: 600;
-  color: #0f172a;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0b1220;
   line-height: 1.3;
 }
 
 .typo-section-header {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #94a3b8;
+  color: #8a93a3;
 }
 
 .typo-drug-name {
-  font-family: 'DM Sans', system-ui, sans-serif;
   font-size: 15px;
   font-weight: 600;
-  color: #0f172a;
+  letter-spacing: -0.01em;
+  color: #0b1220;
 }
 
 .typo-body {
-  font-family: 'DM Sans', system-ui, sans-serif;
   font-size: 13px;
   font-weight: 400;
-  color: #334155;
+  color: #3c4759;
   line-height: 1.6;
 }
 
 .typo-label {
-  font-family: 'DM Sans', system-ui, sans-serif;
   font-size: 11px;
   font-weight: 500;
-  color: #94a3b8;
+  color: #8a93a3;
 }
 
 .typo-score {
-  font-family: 'DM Mono', ui-monospace, monospace;
+  font-family: 'Geist Mono Variable', ui-monospace, monospace;
   font-size: 13px;
 }
 
 .typo-rec {
-  font-family: 'DM Sans', system-ui, sans-serif;
   font-size: 13px;
   font-weight: 500;
 }
 
-/* ── Animations ───────────────────────────────────────────────── */
+.text-balance { text-wrap: balance; }
+.text-pretty { text-wrap: pretty; }
+
+/* Tabular figures for clinical numbers */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ── Brand surfaces ───────────────────────────────────────────── */
+
+/* Fine clinical grid used behind hero / section art */
+.bg-clinical-grid {
+  background-image:
+    linear-gradient(to right, rgba(11, 18, 32, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(11, 18, 32, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.bg-clinical-grid-dark {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* Soft radial fade mask for grids */
+.mask-radial-fade {
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%);
+}
+
+.mask-fade-x {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent);
+}
+
+.mask-fade-b {
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
+  mask-image: linear-gradient(to bottom, #000 60%, transparent);
+}
+
+/* Film grain — keeps large gradients from banding and adds texture */
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Dense hairline scrollbars inside EMR panes */
+.emr-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd2dc transparent;
+}
+
+/* Hide scrollbars on horizontal chip rows while keeping them scrollable */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── DUR island morph ─────────────────────────────────────────── */
+
+.dur-island {
+  transition-property: width, height, border-radius, background-color, box-shadow;
+  transition-duration: 620ms;
+  transition-timing-function: var(--ease-spring);
+  will-change: width, height;
+}
+
+.dur-island-content-enter {
+  animation: islandContentIn 380ms var(--ease-out-expo) both;
+  animation-delay: 70ms;
+}
+
+.dur-island-content-exit {
+  animation: islandContentOut 200ms ease-out both;
+}
+
+@keyframes islandContentIn {
+  from { opacity: 0; filter: blur(6px); transform: scale(0.96); }
+  to { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+
+@keyframes islandContentOut {
+  from { opacity: 1; filter: blur(0); transform: scale(1); }
+  to { opacity: 0; filter: blur(6px); transform: scale(0.97); }
+}
+
+/* ── Legacy animation utilities (used by report components) ───── */
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
@@ -171,17 +285,18 @@ html, body, #root {
 /* ── Scrollbar ────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  background: #cbd2dc;
+  border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #8a93a3;
 }
 
 /* ── Input cleanup ────────────────────────────────────────────── */
@@ -195,7 +310,18 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-input:focus, button:focus-visible {
+input:focus {
+  outline: none;
+}
+
+/* Visible keyboard focus everywhere (mouse clicks stay clean) */
+:focus-visible {
+  outline: 2px solid #12a39c;
+  outline-offset: 2px;
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
   outline: none;
 }
 
@@ -203,6 +329,22 @@ input:focus, button:focus-visible {
 
 .transition-600 {
   transition-duration: 600ms;
+}
+
+/* ── Reduced motion ───────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ── Print styles ──────────────────────────────────────────────── */

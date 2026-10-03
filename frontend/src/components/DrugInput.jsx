@@ -3,40 +3,11 @@ import {
   Search, X, AlertTriangle, Globe, FlaskConical, HelpCircle,
   Pill, Ban, Loader2,
 } from 'lucide-react';
-import { createUnknownDrug } from '../data/drugDatabase';
+import { createUnknownDrug, searchDrugs } from '../data/drugDatabase';
+import { checkHardstop } from '../utils/speciesHardstops';
 import { useI18n } from '../i18n';
 
-// ── Species-Specific Toxicity Hardstops ─────────────────────────
-const SPECIES_HARDSTOPS = {
-  cat: {
-    acetaminophen: 'Acetaminophen (paracetamol) is acutely fatal in cats. Cats lack glucuronyl transferase and cannot metabolise it.',
-    paracetamol:   'Paracetamol is acutely fatal in cats. Cats lack glucuronyl transferase and cannot metabolise it.',
-    permethrin:    'Permethrin is a potent feline neurotoxin. Even small topical exposures cause seizures and death.',
-    ibuprofen:     'Ibuprofen is highly toxic to cats causing acute renal failure and GI perforation.',
-    naproxen:      'Naproxen is toxic to cats with a very narrow safety margin — do not use.',
-    benzocaine:    'Benzocaine causes methaemoglobinaemia in cats and can be fatal.',
-    'tea tree':    'Tea tree oil (melaleuca) is neurotoxic to cats even at low topical doses.',
-    melaleuca:     'Melaleuca (tea tree) oil is neurotoxic to cats.',
-    xylitol:       'Xylitol causes severe hypoglycaemia and liver failure.',
-    'onion':       'Onion/garlic compounds cause Heinz body haemolytic anaemia in cats.',
-    'garlic':      'Garlic compounds cause Heinz body haemolytic anaemia in cats.',
-  },
-  dog: {
-    xylitol:   'Xylitol causes severe hypoglycaemia and acute hepatic necrosis in dogs.',
-    grapes:    'Grapes/raisins cause acute renal failure in dogs via an unknown mechanism.',
-    raisins:   'Raisins cause acute renal failure in dogs via an unknown mechanism.',
-    macadamia: 'Macadamia nuts cause tremors and hyperthermia in dogs.',
-  },
-};
-
-function checkHardstop(drug, species) {
-  const checks = SPECIES_HARDSTOPS[species] || {};
-  const nameStr = `${drug.name || ''} ${drug.activeSubstance || ''} ${(drug.brandNames || []).join(' ')}`.toLowerCase();
-  for (const [fragment, reason] of Object.entries(checks)) {
-    if (nameStr.includes(fragment)) return reason;
-  }
-  return null;
-}
+export { checkHardstop };
 
 // ── Source icon ────────────────────────────────────────────────
 function SourceIcon({ source }) {
@@ -171,11 +142,12 @@ export function DrugInput({ drugs, onAddDrug, onRemoveDrug, onUpdateDrug, specie
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await searchFn(val, species, 20);
-        if (res) {
-          setResults(res);
-          setShowDropdown(true);
-        }
+        // Backend search when available; the curated local formulary is the
+        // fallback (no searchFn passed, backend unreachable, or it errors).
+        let res = searchFn ? await searchFn(val, species, 20).catch(() => null) : null;
+        if (!res) res = searchDrugs(val, species);
+        setResults(res);
+        setShowDropdown(true);
       } catch {
         setResults([]);
       } finally {

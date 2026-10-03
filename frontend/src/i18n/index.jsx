@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import en from './en';
 import ko from './ko';
 
@@ -15,8 +15,10 @@ const I18nContext = createContext({
 export function I18nProvider({ children }) {
   const [lang, setLangState] = useState(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('nuvovet-lang');
-      if (stored && translations[stored]) return stored;
+      try {
+        const stored = localStorage.getItem('nuvovet-lang');
+        if (stored && translations[stored]) return stored;
+      } catch { /* storage unavailable */ }
     }
     return 'ko'; // Default to Korean
   });
@@ -24,14 +26,17 @@ export function I18nProvider({ children }) {
   const setLang = useCallback((l) => {
     if (translations[l]) {
       setLangState(l);
-      localStorage.setItem('nuvovet-lang', l);
-      document.documentElement.lang = l === 'ko' ? 'ko' : 'en';
+      try { localStorage.setItem('nuvovet-lang', l); } catch { /* storage unavailable */ }
     }
   }, []);
 
   const toggleLang = useCallback(() => {
     setLang(lang === 'ko' ? 'en' : 'ko');
   }, [lang, setLang]);
+
+  useEffect(() => {
+    document.documentElement.lang = lang === 'ko' ? 'ko' : 'en';
+  }, [lang]);
 
   const t = translations[lang] || en;
 
@@ -47,25 +52,34 @@ export function useI18n() {
   return useContext(I18nContext);
 }
 
-// ── Compact toggle component ─────────────────────────────────────
+// ── Compact segmented toggle (한 / EN) ────────────────────────────
 export function LangToggle({ className = '' }) {
-  const { lang, toggleLang } = useI18n();
-
+  const { lang, setLang } = useI18n();
+  const opts = [
+    { code: 'ko', label: '한', aria: '한국어' },
+    { code: 'en', label: 'EN', aria: 'English' },
+  ];
   return (
-    <button
-      onClick={toggleLang}
-      className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-all duration-200 hover:shadow-sm ${
-        lang === 'ko'
-          ? 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-      } ${className}`}
-      title={lang === 'ko' ? 'Switch to English' : '한국어로 전환'}
-      aria-label={lang === 'ko' ? 'Switch to English' : '한국어로 전환'}
+    <span
+      role="group"
+      aria-label="Language"
+      className={`inline-flex items-center rounded-full bg-ink-100/80 p-0.5 ring-1 ring-inset ring-ink-200/70 ${className}`}
     >
-      <span className={`transition-opacity ${lang === 'ko' ? 'opacity-100 font-semibold' : 'opacity-50'}`}>한</span>
-      <span className="text-slate-300">/</span>
-      <span className={`transition-opacity ${lang === 'en' ? 'opacity-100 font-semibold' : 'opacity-50'}`}>EN</span>
-    </button>
+      {opts.map((o) => (
+        <button
+          key={o.code}
+          type="button"
+          onClick={() => setLang(o.code)}
+          aria-pressed={lang === o.code}
+          aria-label={o.aria}
+          className={`h-7 min-w-[34px] rounded-full px-2 text-[12px] font-semibold transition-all ${
+            lang === o.code ? 'bg-white text-ink-900 shadow-sm ring-1 ring-ink-900/5' : 'text-ink-500 hover:text-ink-800'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </span>
   );
 }
 

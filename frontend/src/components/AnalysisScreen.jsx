@@ -50,13 +50,13 @@ export function AnalysisScreen({ onComplete, drugCount, species }) {
       <MolecularBackground />
 
       <div className="relative z-10 max-w-sm w-full px-6 py-12">
-        {/* Logo */}
-        <div className="flex items-center justify-center mb-8">
+        {/* Brand mark with a monitoring pulse */}
+        <div className="mb-8 flex items-center justify-center">
           <div className="relative">
-            <NuvovetLogo size={96} className="" />
-            <div className="absolute inset-0 animate-ping opacity-20">
-              <NuvovetLogo size={96} className="" />
-            </div>
+            <span className="absolute inset-0 animate-ping rounded-[22px] bg-dur-400/30" />
+            <span className="relative flex h-20 w-20 items-center justify-center rounded-[22px] bg-ink-950 text-white shadow-island">
+              <NuvovetLogo size={40} />
+            </span>
           </div>
         </div>
 
@@ -71,7 +71,7 @@ export function AnalysisScreen({ onComplete, drugCount, species }) {
         </p>
 
         {/* Steps */}
-        <div className="space-y-2 bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-slate-200/50 shadow-sm">
+        <div className="space-y-1.5 rounded-2xl bg-white/85 p-3 shadow-card ring-1 ring-ink-900/5 backdrop-blur-sm">
           {STEPS.map((step, index) => {
             const isCompleted = completedSteps.includes(step.id);
             const isActive = activeStep === index && !isCompleted;
@@ -87,7 +87,7 @@ export function AnalysisScreen({ onComplete, drugCount, species }) {
               >
                 <div className="mt-0.5 shrink-0">
                   {isCompleted ? (
-                    <CheckCircle size={16} className="text-emerald-500" />
+                    <CheckCircle size={16} className="text-dur-500" />
                   ) : isActive ? (
                     <Loader2 size={16} className="text-slate-600 animate-spin" />
                   ) : (
@@ -112,7 +112,7 @@ export function AnalysisScreen({ onComplete, drugCount, species }) {
         {/* Progress bar */}
         <div className="mt-4 w-full h-1 bg-slate-200/50 rounded-full overflow-hidden">
           <div
-            className="h-full bg-slate-900/60 rounded-full transition-all duration-500 ease-out"
+            className="h-full rounded-full bg-gradient-to-r from-dur-400 to-dur-600 transition-all duration-500 ease-out"
             style={{ width: `${((completedSteps.length) / STEPS.length) * 100}%` }}
           />
         </div>
