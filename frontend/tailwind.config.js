@@ -56,6 +56,11 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        // laptop screens that are wide but short (1440×900, 1536×864, 1366×768):
+        // the hero tightens so the EMR monitor clears the fold
+        'lg-short': { raw: '(min-width: 1024px) and (max-height: 940px)' },
+      },
       colors: {
         ink,
         dur,

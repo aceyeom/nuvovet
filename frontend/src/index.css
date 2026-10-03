@@ -419,6 +419,21 @@ html, body, #root {
 @keyframes cta-spin { to { --cta-angle: 360deg; } }
 
 /* ── Boot sequence (the EMR window powers on) ── */
+/* standby: the phosphor line rests where the power-on line will ignite */
+.boot-standby-line {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 36%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(110, 234, 223, 0.55), transparent);
+  box-shadow: 0 0 12px 1px rgba(79, 209, 197, 0.25);
+  animation: boot-standby 2.8s ease-in-out infinite;
+}
+@keyframes boot-standby {
+  0%, 100% { opacity: 0.18; transform: scaleX(0.6); }
+  50% { opacity: 0.6; transform: scaleX(1); }
+}
 .boot-line {
   position: absolute;
   left: 0;

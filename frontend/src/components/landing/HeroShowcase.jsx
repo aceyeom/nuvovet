@@ -316,6 +316,27 @@ function DdiMatrix({ drugs, cellState }) {
   );
 }
 
+const TERMINAL_BRAND = { fontFamily: "'Pretendard Variable', Pretendard, sans-serif" };
+
+/** The monitor before power-on: a dim terminal prompt and a resting phosphor line. */
+function BootStandby({ fontSize }) {
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-[radial-gradient(120%_90%_at_50%_0%,#08121B_0%,#04070C_70%)]">
+      <div className="hero-scanlines absolute inset-0 opacity-70" />
+      <div className="relative px-[7%] pt-[7%] font-mono" style={{ fontSize }}>
+        <div className="flex items-baseline gap-[0.8em]">
+          <span className="text-[1.6em] font-bold tracking-[-0.03em] text-white/30" style={TERMINAL_BRAND}>
+            nuvo<span className="text-island-info/45">DUR</span>
+          </span>
+          <span className="text-white/25">overlay · standby</span>
+          <span className="hud-blink text-island-info/80">_</span>
+        </div>
+      </div>
+      <span className="boot-standby-line" />
+    </div>
+  );
+}
+
 function BootLog({ lines, ready, fontSize }) {
   const base = 980; // ms — after the CRT opens
   const step = 250;
@@ -323,7 +344,7 @@ function BootLog({ lines, ready, fontSize }) {
   return (
     <div className="relative flex h-full flex-col justify-start px-[7%] pt-[7%] font-mono text-[#BFF5EF]" style={{ fontSize }}>
       <div className="boot-row mb-[1.4em] flex items-baseline gap-[0.8em]" style={{ '--d': `${base - 200}ms` }}>
-        <span className="text-[1.6em] font-bold tracking-[-0.03em] text-white" style={{ fontFamily: "'Pretendard Variable', Pretendard, sans-serif" }}>
+        <span className="text-[1.6em] font-bold tracking-[-0.03em] text-white" style={TERMINAL_BRAND}>
           nuvo<span className="text-island-info">DUR</span>
         </span>
         <span className="text-white/35">overlay · boot</span>
@@ -488,10 +509,11 @@ export function HeroShowcase({ active = true }) {
   useEffect(() => {
     if (reduced) { setBoot('done'); return undefined; }
     if (boot !== 'off') return undefined;
-    // power on once a third of the EMR window is in view
+    // power on once the top 40% of the monitor is in view — the power-on
+    // line (36%), the boot log and the dock all happen up there
     const io = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting && e.intersectionRatio >= 0.32) setBoot('crt'); },
-      { threshold: [0, 0.32, 0.5, 1] },
+      ([e]) => { if (e.isIntersecting && e.intersectionRatio >= 0.4) setBoot('crt'); },
+      { threshold: [0, 0.2, 0.4, 0.6, 1] },
     );
     io.observe(windowRef.current);
     return () => io.disconnect();
@@ -838,11 +860,7 @@ export function HeroShowcase({ active = true }) {
                   )}
                   {boot === 'crt' && <span className="boot-line" />}
                   {boot === 'reveal' && <span className="boot-wipe-edge" />}
-                  {boot === 'off' && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="kicker text-[10px] text-white/20">{H.idle}</span>
-                    </div>
-                  )}
+                  {boot === 'off' && <BootStandby fontSize={Math.max(8.5, Math.min(13, windowW / 82))} />}
                 </div>
               )}
             </div>

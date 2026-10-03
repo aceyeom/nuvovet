@@ -20,6 +20,12 @@ export function drugLabel(drug, lang) {
 // Korean vets read SID/BID/TID and PO as-is; only spell out the rest
 const KO_REGIMEN_TERMS = { Monthly: '월 1회', Topical: '외용', Weekly: '주 1회' };
 
+// "Renal disease" → "renal disease" inside a sentence; acronyms ("GI ulceration") stay
+function midSentence(term) {
+  const s = String(term || '');
+  return /^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s;
+}
+
 function trimNumber(n) {
   return Number.isFinite(n) ? String(+Number(n).toFixed(3)) : String(n);
 }
@@ -129,7 +135,7 @@ export function describeFinding(f, { t, lang, species, patientName }) {
       default:
         // drug–disease (renal, hepatic, cardiomyopathy, …)
         title = fmt(k.disease.title, base);
-        summary = fmt(k.disease.summary, { ...base, condition: f.condition, contra: I.terms?.[f.contraindication] || f.contraindication });
+        summary = fmt(k.disease.summary, { ...base, condition: f.condition, contra: I.terms?.[f.contraindication] || midSentence(f.contraindication) });
         action = fmt(k.disease.action, base);
     }
   }

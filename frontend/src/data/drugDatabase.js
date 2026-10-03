@@ -520,7 +520,7 @@ const RAW_DRUG_DATABASE = [
   {
     id: 'firocoxib',
     name: 'Firocoxib (Previcox)',
-    nameKr: null,
+    nameKr: '피로콕시브',
     activeSubstance: 'Firocoxib',
     class: DRUG_CLASS.NSAID,
     source: DRUG_SOURCE.FOREIGN,
@@ -543,7 +543,7 @@ const RAW_DRUG_DATABASE = [
   {
     id: 'pimobendan',
     name: 'Pimobendan (Vetmedin)',
-    nameKr: null,
+    nameKr: '피모벤단',
     activeSubstance: 'Pimobendan',
     class: DRUG_CLASS.CARDIAC,
     source: DRUG_SOURCE.FOREIGN,
@@ -566,7 +566,7 @@ const RAW_DRUG_DATABASE = [
   {
     id: 'oclacitinib',
     name: 'Oclacitinib (Apoquel)',
-    nameKr: null,
+    nameKr: '오클라시티닙',
     activeSubstance: 'Oclacitinib',
     class: DRUG_CLASS.IMMUNOSUPPRESSANT,
     source: DRUG_SOURCE.FOREIGN,

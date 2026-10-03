@@ -64,7 +64,7 @@ export function Hero({ onRequestAccess }) {
     >
       <HeroBackdrop active={active} reduced={reduced} />
 
-      <div className="relative mx-auto max-w-6xl px-5 pt-12 text-center sm:px-8 sm:pt-14 lg:pt-16">
+      <div className="relative mx-auto max-w-6xl px-5 pt-12 text-center sm:px-8 sm:pt-14 lg:pt-16 lg-short:pt-9">
         <p className="hero-in flex items-center justify-center gap-3 sm:gap-4" style={{ '--d': '0ms' }}>
           <span aria-hidden="true" className="h-px w-8 bg-gradient-to-r from-transparent to-white/30 sm:w-16" />
           <span className="shrink-0 text-[13.5px] font-bold tracking-[-0.02em] text-white">
@@ -77,10 +77,10 @@ export function Hero({ onRequestAccess }) {
 
         <h1
           aria-label={`${L.heroTitleA} ${L.heroTitleB}`}
-          className={`mx-auto mt-6 max-w-5xl text-balance font-bold text-white ${
+          className={`mx-auto mt-6 max-w-5xl text-balance font-bold text-white lg-short:mt-5 ${
             ko
-              ? 'text-[40px] leading-[1.16] tracking-[-0.04em] sm:text-[60px] lg:text-[72px]'
-              : 'text-[44px] leading-[1.02] tracking-[-0.045em] sm:text-[64px] lg:text-[80px]'
+              ? 'text-[40px] leading-[1.16] tracking-[-0.04em] sm:text-[60px] lg:text-[72px] lg-short:text-[64px]'
+              : 'text-[44px] leading-[1.02] tracking-[-0.045em] sm:text-[64px] lg:text-[80px] lg-short:text-[70px]'
           }`}
         >
           <span aria-hidden="true" className="block">
@@ -97,11 +97,11 @@ export function Hero({ onRequestAccess }) {
           </span>
         </h1>
 
-        <p className="hero-in mx-auto mt-6 max-w-[44rem] text-pretty text-[16.5px] leading-relaxed text-white/60 sm:text-[18px]" style={{ '--d': '700ms' }}>
+        <p className="hero-in mx-auto mt-6 max-w-[44rem] text-pretty text-[16.5px] leading-relaxed text-white/60 sm:text-[18px] lg-short:mt-4" style={{ '--d': '700ms' }}>
           <BrandText tone="dark">{L.heroSub}</BrandText>
         </p>
 
-        <div className="hero-in mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row" style={{ '--d': '900ms' }}>
+        <div className="hero-in mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row lg-short:mt-6" style={{ '--d': '900ms' }}>
           <Link
             to="/demo"
             className="cta-glow group inline-flex h-12 w-full items-center justify-center gap-2.5 rounded-full px-7 text-[15px] font-semibold text-white sm:w-auto"
@@ -120,7 +120,7 @@ export function Hero({ onRequestAccess }) {
           </button>
         </div>
 
-        <ul className="hero-in mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 sm:gap-x-3" style={{ '--d': '1100ms' }}>
+        <ul className="hero-in mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 sm:gap-x-3 lg-short:mt-4" style={{ '--d': '1100ms' }}>
           {L.heroMeta.map((m, i) => (
             <li key={m} className="flex items-center gap-3">
               {i > 0 && <span aria-hidden="true" className="hidden text-white/20 sm:inline">/</span>}
@@ -130,7 +130,7 @@ export function Hero({ onRequestAccess }) {
         </ul>
       </div>
 
-      <div className="relative mx-auto mt-10 max-w-[1700px] px-3 pb-20 sm:mt-12 sm:px-6 sm:pb-28">
+      <div className="relative mx-auto mt-10 max-w-[1700px] px-3 pb-20 sm:mt-12 sm:px-6 sm:pb-28 lg-short:mt-7">
         <HeroShowcase active={active} />
       </div>
 
