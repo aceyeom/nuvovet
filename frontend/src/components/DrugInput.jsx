@@ -66,7 +66,7 @@ function PrescriptionRow({ drug, index, species, weight, onRemove, onUpdateDose 
   const src = sourceWord(drug.source, t);
   const dose = parseFloat(drug.dosePerKg);
   const total = dose > 0 && weight > 0 ? `${trimNum(dose * weight)} mg` : null;
-  const doseId = `dose-${drug.id}`;
+  const doseId = `dose-${String(drug.id).replace(/[^\w-]/g, '_')}`;
   const secondaryName = lang === 'ko' ? drug.nameKr : null;
 
   return (

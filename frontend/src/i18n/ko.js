@@ -31,7 +31,6 @@ const ko = {
 
   // ── 네비게이션 ─────────────────────────────────────────────────
   nav: {
-    tryDemo: '라이브 데모 체험',
     requestAccess: '도입 문의',
     signIn: '병원 로그인',
     launchDemo: '라이브 데모 열기',
@@ -41,7 +40,6 @@ const ko = {
     menu: '메뉴',
     close: '메뉴 닫기',
     soon: '출시 예정',
-    live: '출시',
     demoDesc: '시뮬레이션 EMR에서 nuvoDUR 체험 · 로그인 불필요',
     signInDesc: '접근 코드가 있는 병원용 전체 시스템',
     accessDesc: '우리 병원 계정 발급 신청',
@@ -654,7 +652,6 @@ const ko = {
     suggestedFix: '권장 조치',
     speciesNote: '종별 참고',
     doseFactor: '용량',
-    doseScalingApplied: '용량 스케일링 적용됨',
     doseScalingNotApplied: '표준 용량 기준 (처방 용량 미입력)',
     confidenceReasons: {
       koreanDbVerified: '국내 DB 검증 완료',
@@ -942,6 +939,8 @@ const ko = {
     successKicker: '접수 완료',
     successTitle: '신청이 접수되었습니다',
     successDesc: '신청서를 검토한 후 1~2영업일 내에 연락드리겠습니다.',
+    waitlistSuccessTitle: '대기자 명단에 등록되었습니다',
+    waitlistSuccessDesc: 'nuvoClaim이 병원에 공개되는 대로 가장 먼저 연락드리겠습니다.',
   },
 
   drugClasses: {

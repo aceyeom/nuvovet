@@ -18,6 +18,7 @@ export function RequestAccessModal({ isOpen, onClose, product = 'dur' }) {
   const dialogRef = useRef(null);
   const firstFieldRef = useRef(null);
   const returnFocusRef = useRef(null);
+  const successRef = useRef(null);
 
   const isClaims = product === 'claims';
 
@@ -58,6 +59,11 @@ export function RequestAccessModal({ isOpen, onClose, product = 'dur' }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  // The submit button unmounts on success — move focus to the confirmation
+  useEffect(() => {
+    if (status === 'success') successRef.current?.focus();
+  }, [status]);
 
   if (!isOpen) return null;
 
@@ -124,14 +130,15 @@ export function RequestAccessModal({ isOpen, onClose, product = 'dur' }) {
         </div>
 
         {status === 'success' ? (
-          <div className="px-6 pb-7 pt-6 sm:px-7" role="status" aria-live="polite">
+          <div className="px-6 pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-6 sm:px-7 sm:pb-7" role="status" aria-live="polite">
             <div className="relative pl-4">
               <span aria-hidden="true" className={`absolute inset-y-0.5 left-0 w-[3px] ${isClaims ? 'bg-claims-500' : 'bg-dur-500'}`} />
               <p className={`kicker text-[10.5px] ${accent}`}>{RA.successKicker}</p>
-              <h3 id="ra-title" className="mt-2 text-[20px] font-bold tracking-[-0.02em] text-ink-900">{RA.successTitle}</h3>
-              <p id="ra-desc" className="mt-1.5 text-[14px] leading-relaxed text-ink-500">{RA.successDesc}</p>
+              <h3 id="ra-title" className="mt-2 text-[20px] font-bold tracking-[-0.02em] text-ink-900">{isClaims ? RA.waitlistSuccessTitle : RA.successTitle}</h3>
+              <p id="ra-desc" className="mt-1.5 text-[14px] leading-relaxed text-ink-500"><BrandText>{isClaims ? RA.waitlistSuccessDesc : RA.successDesc}</BrandText></p>
             </div>
             <button
+              ref={successRef}
               type="button"
               onClick={handleClose}
               className="mt-7 h-12 w-full rounded-lg bg-ink-900 text-[14.5px] font-semibold text-white transition-colors hover:bg-ink-800"

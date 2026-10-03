@@ -30,7 +30,6 @@ const en = {
 
   // ── Navigation ─────────────────────────────────────────────────
   nav: {
-    tryDemo: 'Try the live demo',
     requestAccess: 'Request access',
     signIn: 'Clinic sign-in',
     launchDemo: 'Open the live demo',
@@ -40,7 +39,6 @@ const en = {
     menu: 'Menu',
     close: 'Close menu',
     soon: 'Soon',
-    live: 'Live',
     demoDesc: 'nuvoDUR on a simulated EMR · no login',
     signInDesc: 'Full system for clinics with an access code',
     accessDesc: 'Get credentials for your clinic',
@@ -638,7 +636,6 @@ const en = {
     suggestedFix: 'Suggested fix',
     speciesNote: 'Species note',
     doseFactor: 'Dose',
-    doseScalingApplied: 'Dose scaling applied',
     doseScalingNotApplied: 'Standard dose basis (prescribed dose not entered)',
     confidenceReasons: {
       koreanDbVerified: 'Korean DB verified',
@@ -926,6 +923,8 @@ const en = {
     successKicker: 'Received',
     successTitle: 'Request received',
     successDesc: 'We’ll review your request and reach out within 1–2 business days.',
+    waitlistSuccessTitle: 'You’re on the list',
+    waitlistSuccessDesc: 'We’ll be in touch as soon as nuvoClaim opens to clinics.',
   },
 
   drugClasses: {

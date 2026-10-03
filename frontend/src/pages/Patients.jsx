@@ -13,6 +13,16 @@ import {
 
 const fmt = (s, vars = {}) => String(s ?? '').replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
 
+// Tab title for this route; the previous title comes back on unmount.
+function useDocumentTitle(title) {
+  useEffect(() => {
+    if (!title) return undefined;
+    const prev = document.title;
+    document.title = title;
+    return () => { document.title = prev; };
+  }, [title]);
+}
+
 const INPUT =
   'h-11 w-full rounded-md border border-ink-200 bg-white px-3 text-[16px] text-ink-900 transition-colors placeholder:text-ink-300 hover:border-ink-300 focus:border-dur-600 focus:outline-none focus:ring-[3px] focus:ring-dur-500/15 sm:text-[14px]';
 
@@ -286,6 +296,7 @@ export default function Patients() {
   const filtered = patients.filter((p) => !q || p.name.toLowerCase().includes(q) || (p.owner_phone ?? '').toLowerCase().includes(q));
   const sorted = sortPatients(filtered, sortBy);
   const selected = patients.find((p) => p.id === selectedId) || null;
+  useDocumentTitle(`${selected ? selected.name : P.title} — nuvoDUR`);
 
   const handleDelete = (id) => {
     deletePatient(id);
@@ -325,13 +336,15 @@ export default function Patients() {
               <h1 className="mt-2 text-[28px] font-bold leading-tight tracking-[-0.03em] text-ink-900 sm:text-[34px]">{P.title}</h1>
               <p className="mt-1.5 text-[14.5px] text-ink-500">{P.sub}</p>
             </div>
-            <button
-              type="button"
-              onClick={() => navigate('/system')}
-              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-ink-900 px-5 text-[14px] font-semibold text-white transition-colors hover:bg-ink-800"
-            >
-              {P.newReview} <span aria-hidden="true">→</span>
-            </button>
+            {patients.length > 0 && (
+              <button
+                type="button"
+                onClick={() => navigate('/system')}
+                className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-ink-900 px-5 text-[14px] font-semibold text-white transition-colors hover:bg-ink-800"
+              >
+                {P.newReview} <span aria-hidden="true">→</span>
+              </button>
+            )}
           </div>
 
           {patients.length === 0 ? (
@@ -359,7 +372,7 @@ export default function Patients() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={P.searchPlaceholder}
-                    className={INPUT}
+                    className={`${INPUT} [&::-webkit-search-cancel-button]:appearance-none`}
                   />
                 </div>
                 <div>

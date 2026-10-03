@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { SeverityBadge, severityKey, severityTone, severityWord, SEVERITY_TONE } from './SeverityBadge';
 import { DrugTimeline } from './DrugTimeline';
 import { ProductLockup, BrandText } from './NuvovetLogo';
@@ -63,7 +63,7 @@ function Kicker({ children, className = '' }) {
 
 // ── Masthead ────────────────────────────────────────────────────
 
-function Masthead({ results, patientInfo, species, embedded, onBack }) {
+function Masthead({ results, patientInfo, species, embedded, onBack, titleRef }) {
   const titleSize = embedded ? 'text-[24px] sm:text-[28px]' : 'text-[28px] sm:text-[34px]';
   const { t, lang } = useI18n();
   const R = t.results;
@@ -105,7 +105,7 @@ function Masthead({ results, patientInfo, species, embedded, onBack }) {
             {R.durReport} <span className="mx-1.5 text-ink-300" aria-hidden="true">/</span>
             <span className="font-mono tracking-[0.06em]">{reportId(results)}</span>
           </p>
-          <h2 className={`mt-2 text-balance font-bold leading-[1.1] tracking-[-0.03em] text-ink-900 ${titleSize}`}>
+          <h2 ref={titleRef} tabIndex={-1} className={`mt-2 text-balance font-bold leading-[1.1] tracking-[-0.03em] text-ink-900 focus:outline-none ${titleSize}`}>
             {patientInfo?.name || fmt(R.anonPatient, { species: speciesShort })}
           </h2>
           {meta.length > 0 && <p className="mt-2 text-[14px] text-ink-500">{meta.join(' · ')}</p>}
@@ -205,7 +205,7 @@ function PatientPanel({ patientInfo, species }) {
     [R.patient, patientInfo.name],
     [R.species, sp ? speciesName(t, lang, sp) : null],
     [R.breed, patientInfo.breed],
-    [R.weight, patientInfo.weight ? <span className="font-mono tnum">{patientInfo.weight} kg</span> : null],
+    [R.weight, patientInfo.weight ? <><span className="font-mono tnum">{patientInfo.weight}</span> kg</> : null],
     [R.sex, sexLabel],
     [R.age, patientInfo.age ? fmt(R.ageValue, { n: patientInfo.age }) : null],
     [R.conditions, patientInfo.conditions?.length ? patientInfo.conditions.join(', ') : null],
@@ -317,7 +317,7 @@ function InteractionItem({ interaction, index, acknowledged, noted, onAcknowledg
                       onClick={() => setShowWhy((v) => !v)}
                       aria-expanded={showWhy}
                       aria-controls={`${uid}-why`}
-                      className="-ml-1 inline-flex h-9 items-center rounded-md px-1 text-[13px] font-semibold text-amber-700 underline decoration-amber-300 underline-offset-[5px] transition-colors hover:text-amber-800"
+                      className="-ml-1 inline-flex h-10 items-center rounded-md px-1 text-[13px] font-semibold text-amber-700 underline decoration-amber-300 underline-offset-[5px] transition-colors hover:text-amber-800"
                     >
                       {R.whyDangerous}
                     </button>
@@ -510,6 +510,7 @@ export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, is
   const [acknowledged, setAcknowledged] = useState({});
   const [noted, setNoted] = useState({});
   const [showScanBar, setShowScanBar] = useState(false);
+  const titleRef = useRef(null);
   const interactionCount = results?.interactions?.length || 0;
   const reviewedCount = Array.from({ length: interactionCount }, (_, i) => acknowledged[i] || noted[i]).filter(Boolean).length;
   const allReviewed = interactionCount > 0 && reviewedCount >= interactionCount;
@@ -522,6 +523,11 @@ export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, is
     setShowScanBar(false);
     return undefined;
   }, [allReviewed, embedded]);
+
+  // Clinic workspace: land keyboard / screen-reader focus on the report
+  useEffect(() => {
+    if (!embedded) titleRef.current?.focus({ preventScroll: true });
+  }, [embedded]);
 
   if (!results) return null;
 
@@ -558,8 +564,8 @@ export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, is
 
   return (
     <>
-      <div className={`mx-auto max-w-6xl animate-fade-in px-4 sm:px-6 lg:px-8 ${embedded ? 'py-6 sm:py-8' : 'pb-16 pt-6 sm:pt-8'} ${showScanBar ? 'pb-28' : ''}`}>
-        <Masthead results={results} patientInfo={patientInfo} species={species} embedded={embedded} onBack={onBack} />
+      <div className={`mx-auto max-w-[1280px] animate-fade-in px-4 sm:px-6 lg:px-8 ${embedded ? 'py-6 sm:py-8' : 'pb-16 pt-6 sm:pt-8'} ${showScanBar ? 'pb-28' : ''}`}>
+        <Masthead results={results} patientInfo={patientInfo} species={species} embedded={embedded} onBack={onBack} titleRef={titleRef} />
         <Verdict results={verdictResults} contextFindings={contextFindings} refined={!!results.wasRefined} />
 
         <div className="mt-10 grid grid-cols-1 gap-x-12 gap-y-12 lg:grid-cols-[288px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:[grid-template-areas:'patient_main'_'aside_main'] xl:grid-cols-[312px_minmax(0,1fr)]">
@@ -668,7 +674,7 @@ export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, is
       {/* Appears once every interaction has been reviewed (clinic workspace) */}
       {showScanBar && (
         <div className="no-print fixed inset-x-0 bottom-0 z-30 animate-slide-up-bar border-t border-ink-200 bg-white/95 backdrop-blur" role="status">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
             <p className="min-w-0">
               <span className="kicker text-[10.5px] text-emerald-700">{R.allReviewed}</span>
               <span className={`ml-3 hidden text-[11.5px] text-ink-400 tnum md:inline ${mono}`}>

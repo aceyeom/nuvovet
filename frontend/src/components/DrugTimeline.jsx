@@ -259,7 +259,7 @@ export function DrugTimeline({ drugA, drugB }) {
           )}
           {peakA && (
             <span aria-hidden="true" className="absolute -translate-y-full whitespace-nowrap pb-1 pl-1 font-mono text-[10px] font-semibold text-ink-900" style={{ left: `${xPct(peakA.x)}%`, top: `${yPct(peakA.y)}%` }}>
-              Cmax <span className="font-normal text-ink-400">{pkA.tmax}h</span>
+              Cmax
             </span>
           )}
           {peakB && (

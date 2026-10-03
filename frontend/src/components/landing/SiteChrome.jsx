@@ -143,7 +143,7 @@ export function SiteNav({ onRequestAccess }) {
     >
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-[60] focus:rounded-full focus:bg-white focus:px-4 focus:py-2 focus:text-[13px] focus:font-semibold focus:text-ink-900"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-[60] focus:rounded-full focus:bg-white focus:px-4 focus:py-[11px] focus:text-[13px] focus:font-semibold focus:text-ink-900"
       >
         {N.skip}
       </a>

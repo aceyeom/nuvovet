@@ -22,6 +22,16 @@ const writeAuth = () => { try { sessionStorage.setItem(AUTH_KEY, '1'); } catch {
 
 const fmt = (s, vars = {}) => String(s ?? '').replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
 
+// Tab title for this route; the previous title comes back on unmount.
+function useDocumentTitle(title) {
+  useEffect(() => {
+    if (!title) return undefined;
+    const prev = document.title;
+    document.title = title;
+    return () => { document.title = prev; };
+  }, [title]);
+}
+
 // ── Shared field styles ───────────────────────────────────────────
 const INPUT =
   'h-11 w-full rounded-md border border-ink-200 bg-white px-3 text-[16px] text-ink-900 transition-colors placeholder:text-ink-300 hover:border-ink-300 focus:border-dur-600 focus:outline-none focus:ring-[3px] focus:ring-dur-500/15 sm:text-[14px]';
@@ -118,7 +128,7 @@ function TagInput({ id, label, items, onAdd, onRemove, placeholder, suggestions 
                 type="button"
                 onClick={() => onRemove(item)}
                 aria-label={`${t.remove} — ${item}`}
-                className="h-9 shrink-0 rounded-md px-2 text-[12.5px] font-medium text-ink-400 transition-colors hover:text-red-700"
+                className="h-10 shrink-0 rounded-md px-2 text-[12.5px] font-medium text-ink-400 transition-colors hover:text-red-700"
               >
                 {t.remove}
               </button>
@@ -515,6 +525,12 @@ export default function FullSystem() {
 
   useEffect(() => () => clearTimeout(toastRef.current), []);
 
+  useDocumentTitle(
+    !authenticated ? `${F.gateKicker} — nuvoDUR`
+    : step === 'results' ? `${t.results.durReport}${patientName ? ` — ${patientName}` : ''} — nuvoDUR`
+    : `${F.pageTitle} — nuvoDUR`,
+  );
+
   // ── Drug callbacks ────────────────────────────────────────────
   const handleAddDrug = useCallback((drug) => setDrugs((prev) => [...prev, drug]), []);
   const handleRemoveDrug = useCallback((drugId) => setDrugs((prev) => prev.filter((d) => d.id !== drugId)), []);
@@ -692,7 +708,7 @@ export default function FullSystem() {
 
   const readiness = [
     { label: F.speciesToggleLabel, value: species ? (species === 'cat' ? (lang === 'ko' ? t.species.catShort : t.species.cat) : (lang === 'ko' ? t.species.dogShort : t.species.dog)) : null },
-    { label: F.fieldWeight, value: weightNum > 0 ? <span className="font-mono tnum">{weightNum} kg</span> : null },
+    { label: F.fieldWeight, value: weightNum > 0 ? <><span className="font-mono tnum">{weightNum}</span> kg</> : null },
     {
       label: F.sectionDrugs,
       value: drugs.length ? `${fmt(drugs.length === 1 ? F.drugs1 : F.drugsN, { n: drugs.length })} · ${fmt(pairCount === 1 ? F.pairs1 : F.pairsN, { n: pairCount })}` : null,

@@ -173,11 +173,9 @@ function ReportSheet({ open, onClose, entry, analysis, drugs, contextFindings })
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label={t.results.durReport}>
       <button type="button" aria-label={t.close} className="absolute inset-0 bg-ink-950/55 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative flex max-h-[92dvh] w-full max-w-6xl animate-sheet-up flex-col overflow-hidden rounded-t-3xl bg-[#f7f8fa] shadow-window sm:rounded-3xl">
+      <div className="relative flex max-h-[92dvh] w-full max-w-6xl animate-sheet-up flex-col overflow-hidden rounded-t-3xl bg-white shadow-window sm:rounded-3xl">
         <div className="flex items-center gap-3 border-b border-ink-200/70 bg-white px-4 py-3 sm:px-6">
           <ProductLockup product="dur" size="sm" />
-          <span className="hidden h-4 w-px bg-ink-200 sm:block" />
-          <span className="hidden truncate text-[13px] font-medium text-ink-600 sm:inline">{t.results.durReport} — {patientName(entry, lang)}</span>
           <button type="button" onClick={onClose} className="ml-auto h-9 rounded-full px-3 text-[13px] font-semibold text-ink-600 hover:bg-ink-100 hover:text-ink-900">
             {t.close}
           </button>

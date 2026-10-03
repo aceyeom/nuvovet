@@ -9,7 +9,7 @@ import { getDrugById, createUnknownDrug } from '../../data/drugDatabase';
 import { getDemoPatients } from '../../data/breedProfiles';
 import { formatWon, productLabel, lineMetrics, makeRxLine, TX_ITEMS } from '../../data/emrCatalog';
 import {
-  EmrTitleBar, EmrToolbar, EmrTabs, RxGrid, RxMemo, LabsPanel, breedName, patientName, loc,
+  EmrTitleBar, EmrToolbar, EmrTabs, EmrStatusBar, RxGrid, RxMemo, LabsPanel, HistoryPanel, breedName, patientName, loc,
 } from '../emr/EmrUI';
 
 // ──────────────────────────────────────────────────────────────────
@@ -227,13 +227,15 @@ function todayIso() {
 function useBuddy() {
   const { t, lang } = useI18n();
   const base = useMemo(() => {
-    const entry = getDemoPatients().find((p) => p.id === 'golden_retriever');
+    const patients = getDemoPatients();
+    const entry = patients.find((p) => p.id === 'golden_retriever');
     const melox = makeRxLine('meloxicam', 'dog', { days: 30 });
     const omep = makeRxLine('omeprazole', 'dog', { days: 30 });
     const pred = makeRxLine('prednisolone', 'dog', { qty: 0.5, days: 7, isNew: true });
     const gaba = makeRxLine('gabapentin', 'dog', { days: 30 });
     return {
       entry,
+      patientsToday: patients.length,
       before: [melox, omep],
       after: [melox, omep, pred],
       resolved: [gaba, omep, { ...pred, isNew: false }],
@@ -337,10 +339,15 @@ function BuddyScreen({ buddy, lines, overlay, focusIds, tx = [], toolbar = 'cons
               <>
                 <RxMemo entry={e} />
                 <LabsPanel entry={e} dateLabel={todayIso()} />
+                <HistoryPanel entry={e} />
               </>
             )}
           </div>
         </div>
+      </div>
+      {/* pinned to the window's bottom edge when the crop is taller than the chart */}
+      <div className="mt-auto">
+        <EmrStatusBar clock={`${todayIso()} ${e.profile.visit.time}`} patientsToday={buddy.patientsToday} />
       </div>
     </>
   );
@@ -380,7 +387,13 @@ function DockFrame({ height = 240, fill = false, minDesign = 760, screen, dock, 
         {w > 0 && (
           <div
             className="absolute left-0 top-0 flex flex-col bg-emr-bg"
-            style={{ width: designW, minHeight: win.h / s, zoom: s < 1 ? s : undefined }}
+            style={{
+              width: designW,
+              minHeight: win.h / s,
+              // zoom sets text at its final size (even spacing); tiny phone
+              // crops scale as a picture instead, which keeps glyphs uniform
+              ...(s < 1 ? (narrow ? { transform: `scale(${s})`, transformOrigin: 'top left' } : { zoom: s }) : null),
+            }}
           >
             {screen}
           </div>
@@ -750,7 +763,7 @@ function LedgerRow({ r, i, selected, onSelect, latinMono }) {
         aria-controls="engine-island"
         className={cx(
           'group relative grid w-full grid-cols-[34px_minmax(0,1fr)] gap-x-2 border-b border-white/[0.08] py-4 pr-2 text-left transition-colors duration-200',
-          'lg:grid-cols-[46px_176px_minmax(0,1fr)_92px] lg:gap-x-0 lg:py-5',
+          'lg:grid-cols-[40px_148px_minmax(0,1fr)_84px] lg:gap-x-0 lg:py-5 xl:grid-cols-[46px_176px_minmax(0,1fr)_92px]',
           selected ? 'bg-white/[0.045]' : 'hover:bg-white/[0.025]',
         )}
       >
@@ -764,7 +777,7 @@ function LedgerRow({ r, i, selected, onSelect, latinMono }) {
             <span className="text-[13.5px] font-medium leading-[22px] text-white/80 lg:text-[14px]">{r.check}</span>
             <Kicker as="span" className="shrink-0 text-[10.5px] lg:hidden" style={{ color }}>{r.severityLabel}</Kicker>
           </span>
-          <span className="mt-0.5 hidden truncate text-[12.5px] text-white/40 lg:block">{r.patientShort}</span>
+          <span className="mt-0.5 hidden text-pretty text-[12.5px] leading-snug text-white/40 lg:block">{r.patientShort}</span>
         </span>
 
         <span className="col-start-2 mt-1.5 min-w-0 lg:col-start-auto lg:mt-0 lg:pr-5">
@@ -848,7 +861,7 @@ export function Engines() {
         <div className="mt-14 grid grid-cols-1 gap-12 sm:mt-20 lg:grid-cols-12 lg:gap-8">
           {/* Ledger */}
           <Reveal className="order-2 lg:order-1 lg:col-span-7">
-            <div aria-hidden="true" className="hidden grid-cols-[46px_176px_minmax(0,1fr)_92px] border-b border-white/[0.16] pb-3 lg:grid">
+            <div aria-hidden="true" className="hidden border-b border-white/[0.16] pb-3 lg:grid lg:grid-cols-[40px_148px_minmax(0,1fr)_84px] xl:grid-cols-[46px_176px_minmax(0,1fr)_92px]">
               <Kicker as="span" className="pl-3.5 text-[10px] text-white/35">#</Kicker>
               <Kicker as="span" className="text-[10px] text-white/35">{L.ledgerCols.check}</Kicker>
               <Kicker as="span" className="text-[10px] text-white/35">{L.ledgerCols.finding}</Kicker>
@@ -905,12 +918,12 @@ export function Engines() {
                     />
                   </div>
                 </div>
-                <dl className="grid grid-cols-1 border-t border-white/[0.08] sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+                <dl className="grid grid-cols-1 border-t border-white/[0.08] sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
                   <div className="min-w-0 px-4 py-3.5 sm:px-5">
                     <dt className="kicker text-[10px] text-white/35">{L.ledgerPatient}</dt>
                     <dd className="mt-1.5 truncate text-[12.5px] text-white/75">{row.patientLine}</dd>
                   </div>
-                  <div className="min-w-0 border-t border-white/[0.08] px-4 py-3.5 sm:border-l sm:border-t-0 sm:px-5">
+                  <div className="min-w-0 border-t border-white/[0.08] px-4 py-3.5 sm:border-l sm:border-t-0 sm:px-5 lg:border-l-0 lg:border-t xl:border-l xl:border-t-0">
                     <dt className="kicker text-[10px] text-white/35">{L.ledgerId}</dt>
                     <dd className="mt-1.5 truncate font-mono text-[11.5px] text-white/50" title={row.raw.id}>{row.raw.id}</dd>
                   </div>
