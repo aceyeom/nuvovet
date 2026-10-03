@@ -1,5 +1,5 @@
 /**
- * nuvovet DUR — findings layer for the island UI.
+ * nuvoDUR — findings layer for the island UI.
  *
  * Turns the client-side DUR engine output (durEngine.js) plus the open
  * patient chart into a flat, ranked list of "findings" the island can

@@ -127,15 +127,15 @@ export function useDurMonitor({ drugs, species, patient, patientKey, t, lang, on
   const status = useMemo(() => {
     const I = t.island.ui;
     if (flash) return flash; // confirm the action first, then show the re-screen result
-    if (phase === 'checking') return { tone: 'checking', title: fmt(I.screening, { n: drugs.length }), detail: '' };
-    if (drugs.length === 0) return { tone: 'idle', title: 'nuvovet DUR', detail: I.noMeds };
+    if (phase === 'checking') return { tone: 'checking', title: drugs.length === 1 ? I.screeningOne : fmt(I.screening, { n: drugs.length }), detail: '' };
+    if (drugs.length === 0) return { tone: 'idle', title: I.noMeds, detail: '' };
     if (unreviewed.length) {
       const sev = topSeverity(unreviewed.map((d) => d.raw));
       const top = unreviewed.find((d) => d.severity === sev) || unreviewed[0];
       return { tone: sev, title: sevLabel(sev), detail: top.drugsLabel || top.title, extra: unreviewed.length - 1 };
     }
     if (display.length) return { tone: 'reviewed', title: I.allReviewed, detail: fmt(I.reviewedCount, { n: display.length }) };
-    return { tone: 'clear', title: 'nuvovet DUR', detail: fmt(I.medsClear, { n: drugs.length }) };
+    return { tone: 'clear', title: I.noIssues, detail: drugs.length === 1 ? I.medsCountOne : fmt(I.medsCount, { n: drugs.length }) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, flash, drugs.length, unreviewed, display, lang]);
 
@@ -149,7 +149,7 @@ export function useDurMonitor({ drugs, species, patient, patientKey, t, lang, on
   const pairCount = (drugs.length * (drugs.length - 1)) / 2;
   const summary = {
     title: t.island.ui.noIssuesTitle,
-    detail: fmt(t.island.ui.noIssuesDetail, { n: drugs.length, pairs: pairCount }),
+    detail: pairCount === 1 ? t.island.ui.noIssuesDetailOne : fmt(t.island.ui.noIssuesDetail, { n: drugs.length, pairs: pairCount }),
     checks: t.island.ui.checks,
   };
 
@@ -242,7 +242,7 @@ export function useDurMonitor({ drugs, species, patient, patientKey, t, lang, on
       focus,
       list,
       summary,
-      listHeading: fmt(t.island.ui.findingsCount, { n: display.length }),
+      listHeading: display.length === 1 ? t.island.ui.findingsCountOne : fmt(t.island.ui.findingsCount, { n: display.length }),
       listFootnote: analysis.advisories ? fmt(t.island.ui.advisories, { n: analysis.advisories }) : t.island.ui.listFootnote,
       labels: t.island.ui,
       onToggle: toggle,

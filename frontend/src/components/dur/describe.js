@@ -65,7 +65,7 @@ export function describeResolution(resolution, { t, lang, species }) {
 
 /**
  * Display model for a finding.
- * @returns {{ id, severity, kind, title, drugs: string[], drugsLabel, summary, suggestion, verb, citation }}
+ * @returns {{ id, severity, kind, kindLabel, title, drugs: string[], drugsLabel, summary, suggestion, verb, citation }}
  */
 export function describeFinding(f, { t, lang, species, patientName }) {
   const I = t.island;
@@ -140,6 +140,7 @@ export function describeFinding(f, { t, lang, species, patientName }) {
     id: f.id,
     severity: f.severity,
     kind: f.kind,
+    kindLabel: I.ui.kindLabels?.[f.kind] || '',
     title,
     drugs: names,
     drugsLabel: names.join(' + '),

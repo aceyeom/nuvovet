@@ -58,36 +58,27 @@ function getPkParams(drug) {
 }
 
 // ── One-compartment PK model: absorption + elimination ───────────
-// Uses first-order absorption with Bateman equation approximation
+// First-order absorption, Bateman equation, normalised to the
+// single-dose Cmax.
 function generateConcentrationCurve(pk, startHour, maxHour = 24) {
   const { tmax, halfLife, bioavail } = pk;
   const ke = Math.LN2 / halfLife;                    // elimination rate constant
   const ka = (tmax > 0) ? (2.5 / tmax) : 5;         // absorption rate constant (approximation)
   const points = [];
-  const resolution = 200;                              // points for smoothness
+  const resolution = 200;
+
+  const tMaxTheory = Math.log(ka / ke) / (ka - ke);
+  const cmax = Math.abs(ka - ke) < 0.001
+    ? bioavail * ka * tMaxTheory * Math.exp(-ke * tMaxTheory)
+    : bioavail * (ka / (ka - ke)) * (Math.exp(-ke * tMaxTheory) - Math.exp(-ka * tMaxTheory));
 
   for (let i = 0; i <= resolution; i++) {
     const t = (i / resolution) * (maxHour - startHour);
     const absT = startHour + t;
     if (absT > maxHour) break;
-
-    // Bateman equation: C(t) = F * (ka / (ka - ke)) * (e^(-ke*t) - e^(-ka*t))
-    let conc;
-    if (Math.abs(ka - ke) < 0.001) {
-      conc = bioavail * ka * t * Math.exp(-ke * t);
-    } else {
-      conc = bioavail * (ka / (ka - ke)) * (Math.exp(-ke * t) - Math.exp(-ka * t));
-    }
-
-    // Normalize: find theoretical Cmax for scaling
-    const tMaxTheory = Math.log(ka / ke) / (ka - ke);
-    let cmax;
-    if (Math.abs(ka - ke) < 0.001) {
-      cmax = bioavail * ka * tMaxTheory * Math.exp(-ke * tMaxTheory);
-    } else {
-      cmax = bioavail * (ka / (ka - ke)) * (Math.exp(-ke * tMaxTheory) - Math.exp(-ka * tMaxTheory));
-    }
-
+    const conc = Math.abs(ka - ke) < 0.001
+      ? bioavail * ka * t * Math.exp(-ke * t)
+      : bioavail * (ka / (ka - ke)) * (Math.exp(-ke * t) - Math.exp(-ka * t));
     const normalized = cmax > 0 ? conc / cmax : 0;
     points.push({ x: absT, y: Math.max(0, Math.min(1, normalized)) });
   }
@@ -99,20 +90,17 @@ function buildMultiDoseCurve(pk) {
   const { interval } = pk;
   const maxHour = 24;
 
-  // Generate individual dose curves
   const doseCurves = [];
   for (let start = 0; start < maxHour; start += Math.min(interval, maxHour)) {
     doseCurves.push(generateConcentrationCurve(pk, start, maxHour));
   }
 
-  // Superposition: sum concentrations at each time point
   const resolution = 200;
   const merged = [];
   for (let i = 0; i <= resolution; i++) {
     const hour = (i / resolution) * maxHour;
     let totalConc = 0;
     for (const curve of doseCurves) {
-      // Find nearest point
       let best = 0;
       let bestDist = Infinity;
       for (let j = 0; j < curve.length; j++) {
@@ -126,391 +114,211 @@ function buildMultiDoseCurve(pk) {
   return merged;
 }
 
-// ── SVG path helpers ─────────────────────────────────────────────
-function curveToPath(points, w, h, pl, pr, pt, pb) {
-  const uw = w - pl - pr;
-  const uh = h - pt - pb;
-  const maxY = Math.max(...points.map(p => p.y), 1);
-  return points.map((p, i) => {
-    const x = pl + (p.x / 24) * uw;
-    const y = pt + uh - (p.y / maxY) * uh;
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-}
+const findPeak = (points) => points.reduce((max, p) => (p.y > max.y ? p : max), points[0]);
 
-function curveToArea(points, w, h, pl, pr, pt, pb) {
-  const uw = w - pl - pr;
-  const uh = h - pt - pb;
-  const maxY = Math.max(...points.map(p => p.y), 1);
-  const baseline = pt + uh;
-
-  const line = points.map((p, i) => {
-    const x = pl + (p.x / 24) * uw;
-    const y = pt + uh - (p.y / maxY) * uh;
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-
-  const lastX = pl + (points[points.length - 1].x / 24) * uw;
-  const firstX = pl + (points[0].x / 24) * uw;
-  return `${line} L${lastX.toFixed(1)},${baseline} L${firstX.toFixed(1)},${baseline} Z`;
-}
-
-// ── Find peak point ──────────────────────────────────────────────
-function findPeak(points) {
-  return points.reduce((max, p) => p.y > max.y ? p : max, points[0]);
-}
-
-// ── Find trough (minimum after first dose peak) ─────────────────
 function findTrough(points, interval) {
   if (interval >= 24) return null;
-  // Look for local minimum near next dose time
-  const target = interval;
-  const candidates = points.filter(p => Math.abs(p.x - target) < 1.5);
+  const candidates = points.filter((p) => Math.abs(p.x - interval) < 1.5);
   if (candidates.length === 0) return null;
-  return candidates.reduce((min, p) => p.y < min.y ? p : min, candidates[0]);
+  return candidates.reduce((min, p) => (p.y < min.y ? p : min), candidates[0]);
 }
 
-// ── Colors for drug curves ───────────────────────────────────────
-const COLORS = {
-  A: { line: '#1e293b', fill: '#1e293b', accent: '#3b82f6' },  // slate-800 / blue
-  B: { line: '#6366f1', fill: '#6366f1', accent: '#8b5cf6' },  // indigo / violet
+// ── Plot geometry ────────────────────────────────────────────────
+// The SVG stretches to the plot box (preserveAspectRatio="none") and all
+// strokes are non-scaling, so lines stay hairline at any width. Every
+// label is HTML positioned in %, so text stays legible on phones.
+const VB_W = 240;
+const VB_H = 100;
+
+const SERIES = {
+  A: { stroke: '#0B1220', dash: undefined, swatch: 'bg-ink-900' },
+  B: { stroke: '#0B847F', dash: '5 3', swatch: 'bg-dur-600' },
 };
+
+function toPath(points, maxY) {
+  return points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${((p.x / 24) * VB_W).toFixed(2)},${(VB_H - (p.y / maxY) * VB_H).toFixed(2)}`)
+    .join(' ');
+}
+
+function Swatch({ series }) {
+  const s = SERIES[series];
+  return (
+    <svg aria-hidden="true" width="18" height="6" className="shrink-0">
+      <line x1="0" y1="3" x2="18" y2="3" stroke={s.stroke} strokeWidth="1.75" strokeDasharray={s.dash ? '4 2' : undefined} />
+    </svg>
+  );
+}
 
 export function DrugTimeline({ drugA, drugB }) {
   const { t, lang } = useI18n();
 
   const pkA = useMemo(() => getPkParams(drugA), [drugA]);
   const pkB = useMemo(() => getPkParams(drugB), [drugB]);
+  const curveA = useMemo(() => (pkA ? buildMultiDoseCurve(pkA) : []), [pkA]);
+  const curveB = useMemo(() => (pkB ? buildMultiDoseCurve(pkB) : []), [pkB]);
 
   const hasA = !!pkA;
   const hasB = !!pkB;
-
   if (!hasA && !hasB) return null;
 
-  const curveA = useMemo(() => hasA ? buildMultiDoseCurve(pkA) : [], [pkA, hasA]);
-  const curveB = useMemo(() => hasB ? buildMultiDoseCurve(pkB) : [], [pkB, hasB]);
-
-  // SVG dimensions
-  const svgW = 500;
-  const svgH = 160;
-  const padL = 40;   // space for Y-axis label
-  const padR = 10;
-  const padT = 12;
-  const padB = 28;   // space for X-axis labels
-  const usableW = svgW - padL - padR;
-  const usableH = svgH - padT - padB;
-  const maxY = Math.max(
-    ...(hasA ? curveA.map(p => p.y) : [1]),
-    ...(hasB ? curveB.map(p => p.y) : [1]),
-    1
-  );
-
-  // Helper to convert data coords to SVG coords
-  const toSvg = (x, y) => ({
-    sx: padL + (x / 24) * usableW,
-    sy: padT + usableH - (y / maxY) * usableH,
-  });
+  const maxY = Math.max(...curveA.map((p) => p.y), ...curveB.map((p) => p.y), 1);
+  const yPct = (y) => 100 - (y / maxY) * 100; // % from top
+  const xPct = (h) => (h / 24) * 100;
 
   const peakA = hasA ? findPeak(curveA) : null;
   const peakB = hasB ? findPeak(curveB) : null;
   const troughA = hasA ? findTrough(curveA, pkA.interval) : null;
 
-  // Therapeutic window bands
   const therapMinA = hasA ? pkA.therapMin : 0.2;
   const therapMaxA = hasA ? pkA.therapMax : 0.85;
 
-  const ticks = [0, 4, 8, 12, 16, 20, 24];
+  const xTicks = [0, 4, 8, 12, 16, 20, 24];
   const yTicks = [0, 0.25, 0.5, 0.75, 1.0];
 
-  // Dosing arrows
-  const doseTimesA = hasA ? Array.from({ length: Math.ceil(24 / pkA.interval) }, (_, i) => i * pkA.interval).filter(t => t < 24) : [];
-  const doseTimesB = hasB ? Array.from({ length: Math.ceil(24 / pkB.interval) }, (_, i) => i * pkB.interval).filter(t => t < 24) : [];
+  const doseTimes = (pk) => (pk ? Array.from({ length: Math.ceil(24 / pk.interval) }, (_, i) => i * pk.interval).filter((h) => h < 24) : []);
 
-  // Frequency label
   const freqLabel = (interval) => {
     if (interval <= 8) return t.pk.freqTID;
     if (interval <= 12) return t.pk.freqBID;
     return t.pk.freqSID;
   };
+  const nameOf = (drug) => drug?.name;
+  const mono = lang === 'ko' ? '' : 'font-mono'; // Geist Mono has no Hangul
+
+  const rows = [hasA && { key: 'A', pk: pkA, drug: drugA }, hasB && { key: 'B', pk: pkB, drug: drugB }].filter(Boolean);
 
   return (
-    <div className="mt-2 mb-1">
-      <div className="flex items-center justify-between mb-2">
-        <span className="typo-section-header">{t.pk.title}</span>
-      </div>
+    <figure className="m-0">
+      <figcaption className="flex items-baseline justify-between gap-3">
+        <span className="kicker text-[11px] text-ink-500">{t.pk.title}</span>
+        <span className={`text-[10.5px] text-ink-400 ${mono}`}>{t.pk.concentrationRelative}</span>
+      </figcaption>
 
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-        <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            {/* Gradient fills for drug curves */}
-            <linearGradient id="gradA" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={COLORS.A.fill} stopOpacity="0.12" />
-              <stop offset="100%" stopColor={COLORS.A.fill} stopOpacity="0.02" />
-            </linearGradient>
-            <linearGradient id="gradB" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={COLORS.B.fill} stopOpacity="0.10" />
-              <stop offset="100%" stopColor={COLORS.B.fill} stopOpacity="0.01" />
-            </linearGradient>
-          </defs>
+      {/* Plot */}
+      <div className="relative mt-2 h-[170px] pb-6 pl-9 pr-1 pt-5 sm:h-[196px]">
+        <div className="relative h-full">
+          {/* y labels */}
+          {yTicks.map((v) => (
+            <span key={v} aria-hidden="true" className="absolute -left-9 w-7 -translate-y-1/2 text-right font-mono text-[10px] text-ink-400 tnum" style={{ top: `${yPct(v)}%` }}>
+              {Math.round(v * 100)}
+            </span>
+          ))}
+          {/* x labels */}
+          {xTicks.map((h) => (
+            <span key={h} aria-hidden="true" className="absolute top-full mt-1.5 -translate-x-1/2 font-mono text-[10px] text-ink-400 tnum" style={{ left: `${xPct(h)}%` }}>
+              {h}h
+            </span>
+          ))}
 
-          {/* ── Therapeutic window band ── */}
-          {hasA && (
-            <rect
-              x={padL} y={toSvg(0, therapMaxA).sy}
-              width={usableW}
-              height={toSvg(0, therapMinA).sy - toSvg(0, therapMaxA).sy}
-              fill="#10b981" fillOpacity="0.06"
-              stroke="#10b981" strokeOpacity="0.15" strokeWidth="0.5" strokeDasharray="3,3"
-            />
-          )}
-
-          {/* ── Y-axis gridlines + labels ── */}
-          {yTicks.map(yVal => {
-            const { sy } = toSvg(0, yVal);
-            return (
-              <g key={yVal}>
-                <line x1={padL} y1={sy} x2={svgW - padR} y2={sy}
-                  stroke="#e2e8f0" strokeWidth="0.3" />
-                <text x={padL - 4} y={sy + 3} textAnchor="end"
-                  style={{ fontSize: '7px', fontFamily: '"DM Mono", monospace', fill: '#94a3b8' }}>
-                  {(yVal * 100).toFixed(0)}%
-                </text>
-              </g>
-            );
-          })}
-
-          {/* ── Y-axis title ── */}
-          <text
-            x={8} y={padT + usableH / 2}
-            textAnchor="middle"
-            transform={`rotate(-90, 8, ${padT + usableH / 2})`}
-            style={{ fontSize: '7px', fontFamily: '"DM Sans"', fill: '#94a3b8', letterSpacing: '0.02em' }}
+          <svg
+            viewBox={`0 0 ${VB_W} ${VB_H}`}
+            preserveAspectRatio="none"
+            className="absolute inset-0 h-full w-full overflow-visible"
+            role="img"
+            aria-label={`${t.pk.title}: ${rows.map((r) => `${nameOf(r.drug)} — t½ ${r.pk.halfLife}h, Tmax ${r.pk.tmax}h`).join('; ')}`}
           >
-            {t.pk.concentrationRelative}
-          </text>
-
-          {/* ── X-axis gridlines + labels ── */}
-          {ticks.map(tick => {
-            const { sx } = toSvg(tick, 0);
-            return (
-              <g key={tick}>
-                <line x1={sx} y1={padT} x2={sx} y2={padT + usableH}
-                  stroke="#e2e8f0" strokeWidth="0.3" strokeDasharray={tick % 12 === 0 ? 'none' : '2,2'} />
-                <text x={sx} y={svgH - 6} textAnchor="middle"
-                  style={{ fontSize: '8px', fontFamily: '"DM Mono", monospace', fill: '#64748b' }}>
-                  {tick}h
-                </text>
-              </g>
-            );
-          })}
-
-          {/* ── Baseline ── */}
-          <line x1={padL} y1={padT + usableH} x2={svgW - padR} y2={padT + usableH}
-            stroke="#cbd5e1" strokeWidth="0.5" />
-          <line x1={padL} y1={padT} x2={padL} y2={padT + usableH}
-            stroke="#cbd5e1" strokeWidth="0.5" />
-
-          {/* ── Dose administration arrows ── */}
-          {doseTimesA.map((dt, i) => {
-            const { sx } = toSvg(dt, 0);
-            return (
-              <g key={`doseA-${i}`}>
-                <line x1={sx} y1={padT + usableH} x2={sx} y2={padT + usableH + 5}
-                  stroke={COLORS.A.line} strokeWidth="1" />
-                <polygon
-                  points={`${sx},${padT + usableH - 2} ${sx - 2},${padT + usableH + 3} ${sx + 2},${padT + usableH + 3}`}
-                  fill={COLORS.A.line} fillOpacity="0.5"
-                />
-              </g>
-            );
-          })}
-          {doseTimesB.map((dt, i) => {
-            const { sx } = toSvg(dt, 0);
-            return (
-              <g key={`doseB-${i}`}>
-                <polygon
-                  points={`${sx + 3},${padT + usableH - 2} ${sx + 1},${padT + usableH + 3} ${sx + 5},${padT + usableH + 3}`}
-                  fill={COLORS.B.line} fillOpacity="0.4"
-                />
-              </g>
-            );
-          })}
-
-          {/* ── Drug A: area + line ── */}
-          {hasA && curveA.length > 0 && (
-            <>
-              <path d={curveToArea(curveA, svgW, svgH, padL, padR, padT, padB)} fill="url(#gradA)" />
-              <path d={curveToPath(curveA, svgW, svgH, padL, padR, padT, padB)}
-                fill="none" stroke={COLORS.A.line} strokeWidth="1.5" strokeLinecap="round" />
-            </>
-          )}
-
-          {/* ── Drug B: area + line ── */}
-          {hasB && curveB.length > 0 && (
-            <>
-              <path d={curveToArea(curveB, svgW, svgH, padL, padR, padT, padB)} fill="url(#gradB)" />
-              <path d={curveToPath(curveB, svgW, svgH, padL, padR, padT, padB)}
-                fill="none" stroke={COLORS.B.line} strokeWidth="1.5" strokeDasharray="5,3" strokeLinecap="round" />
-            </>
-          )}
-
-          {/* ── Cmax marker for Drug A ── */}
-          {hasA && peakA && (() => {
-            const { sx, sy } = toSvg(peakA.x, peakA.y);
-            return (
-              <g>
-                <circle cx={sx} cy={sy} r="3" fill="white" stroke={COLORS.A.line} strokeWidth="1.5" />
-                <text x={sx + 5} y={sy - 5}
-                  style={{ fontSize: '7px', fontFamily: '"DM Mono", monospace', fill: COLORS.A.line, fontWeight: 600 }}>
-                  Cmax
-                </text>
-                {/* Tmax annotation */}
-                <line x1={sx} y1={sy + 3} x2={sx} y2={padT + usableH}
-                  stroke={COLORS.A.line} strokeWidth="0.5" strokeDasharray="1,2" strokeOpacity="0.3" />
-                <text x={sx} y={padT + usableH + 16} textAnchor="middle"
-                  style={{ fontSize: '6px', fontFamily: '"DM Mono", monospace', fill: '#94a3b8' }}>
-                  Tmax {pkA.tmax}h
-                </text>
-              </g>
-            );
-          })()}
-
-          {/* ── Cmax marker for Drug B ── */}
-          {hasB && peakB && (() => {
-            const { sx, sy } = toSvg(peakB.x, peakB.y);
-            return (
-              <g>
-                <circle cx={sx} cy={sy} r="3" fill="white" stroke={COLORS.B.line} strokeWidth="1.5" />
-                <text x={sx + 5} y={sy - 5}
-                  style={{ fontSize: '7px', fontFamily: '"DM Mono", monospace', fill: COLORS.B.line, fontWeight: 600 }}>
-                  Cmax
-                </text>
-              </g>
-            );
-          })()}
-
-          {/* ── Trough marker for Drug A ── */}
-          {hasA && troughA && (() => {
-            const { sx, sy } = toSvg(troughA.x, troughA.y);
-            return (
-              <g>
-                <circle cx={sx} cy={sy} r="2.5" fill="white" stroke={COLORS.A.line} strokeWidth="1" />
-                <text x={sx + 4} y={sy + 3}
-                  style={{ fontSize: '6px', fontFamily: '"DM Mono", monospace', fill: '#94a3b8' }}>
-                  Cmin
-                </text>
-              </g>
-            );
-          })()}
-
-          {/* ── Therapeutic window label ── */}
-          {hasA && (
-            <text x={svgW - padR - 2} y={toSvg(0, (therapMinA + therapMaxA) / 2).sy + 3}
-              textAnchor="end"
-              style={{ fontSize: '6px', fontFamily: '"DM Sans"', fill: '#10b981', fontWeight: 500 }}>
-              {t.pk.therapeuticBand}
-            </text>
-          )}
-
-          {/* ── X-axis title ── */}
-          <text x={padL + usableW / 2} y={svgH - 0}
-            textAnchor="middle"
-            style={{ fontSize: '7px', fontFamily: '"DM Sans"', fill: '#94a3b8' }}>
-            {t.pk.timeAxis}
-          </text>
-        </svg>
-
-        {/* ── Legend + PK Summary ── */}
-        <div className="px-3 py-2 border-t border-slate-100 bg-slate-50/50">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+            {/* Therapeutic window */}
             {hasA && (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4" stroke={COLORS.A.line} strokeWidth="2" /></svg>
-                  <span className="text-[11px] font-semibold text-slate-800">
-                    {lang === 'ko' && drugA.nameKr ? drugA.nameKr : drugA.name}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-                  <span>t½ {pkA.halfLife}h</span>
-                  <span>Tmax {pkA.tmax}h</span>
-                  <span>{freqLabel(pkA.interval)}</span>
-                </div>
-              </div>
+              <g>
+                <rect x="0" y={(yPct(therapMaxA) / 100) * VB_H} width={VB_W} height={((yPct(therapMinA) - yPct(therapMaxA)) / 100) * VB_H} fill="#10b981" fillOpacity="0.07" />
+                {[therapMaxA, therapMinA].map((v) => (
+                  <line key={v} x1="0" x2={VB_W} y1={(yPct(v) / 100) * VB_H} y2={(yPct(v) / 100) * VB_H} stroke="#10b981" strokeOpacity="0.45" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+                ))}
+              </g>
             )}
-            {hasB && (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4" stroke={COLORS.B.line} strokeWidth="2" strokeDasharray="4,2" /></svg>
-                  <span className="text-[11px] font-semibold text-slate-800">
-                    {lang === 'ko' && drugB.nameKr ? drugB.nameKr : drugB.name}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-                  <span>t½ {pkB.halfLife}h</span>
-                  <span>Tmax {pkB.tmax}h</span>
-                  <span>{freqLabel(pkB.interval)}</span>
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* Therapeutic window legend */}
+            {/* Grid */}
+            {yTicks.map((v) => (
+              <line key={`y${v}`} x1="0" x2={VB_W} y1={(yPct(v) / 100) * VB_H} y2={(yPct(v) / 100) * VB_H} stroke="#0B1220" strokeOpacity={v === 0 ? 0.35 : 0.07} vectorEffect="non-scaling-stroke" />
+            ))}
+            {xTicks.map((h) => (
+              <line key={`x${h}`} x1={(h / 24) * VB_W} x2={(h / 24) * VB_W} y1="0" y2={VB_H} stroke="#0B1220" strokeOpacity={h === 0 ? 0.35 : 0.06} strokeDasharray={h % 12 === 0 ? undefined : '2 3'} vectorEffect="non-scaling-stroke" />
+            ))}
+
+            {/* Dose administrations — short ticks on the baseline */}
+            {['A', 'B'].map((k) => doseTimes(k === 'A' ? pkA : pkB).map((h) => (
+              <line key={`${k}${h}`} x1={(h / 24) * VB_W + (k === 'B' ? 1.6 : 0)} x2={(h / 24) * VB_W + (k === 'B' ? 1.6 : 0)} y1={VB_H - 7} y2={VB_H} stroke={SERIES[k].stroke} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+            )))}
+
+            {/* Tmax guide for drug A */}
+            {peakA && (
+              <line x1={(peakA.x / 24) * VB_W} x2={(peakA.x / 24) * VB_W} y1={(yPct(peakA.y) / 100) * VB_H} y2={VB_H} stroke="#0B1220" strokeOpacity="0.3" strokeDasharray="1 2.5" vectorEffect="non-scaling-stroke" />
+            )}
+
+            {/* Curves */}
+            {hasA && <path d={toPath(curveA, maxY)} fill="none" stroke={SERIES.A.stroke} strokeWidth="1.75" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
+            {hasB && <path d={toPath(curveB, maxY)} fill="none" stroke={SERIES.B.stroke} strokeWidth="1.75" strokeDasharray={SERIES.B.dash} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
+          </svg>
+
+          {/* Annotations (HTML, so they never scale) */}
           {hasA && (
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <div className="w-3 h-3 rounded-sm bg-emerald-500/10 border border-emerald-500/20" />
-              <span className="text-[10px] text-slate-500">
-                {t.pk.therapeuticWindow}
-                <span className="font-mono ml-1">({(therapMinA * 100).toFixed(0)}–{(therapMaxA * 100).toFixed(0)}% Cmax)</span>
-              </span>
-            </div>
+            <span aria-hidden="true" className={`absolute right-1 -translate-y-1/2 text-[10px] font-medium text-emerald-700 ${mono}`} style={{ top: `${(yPct(therapMinA) + yPct(therapMaxA)) / 2}%` }}>
+              {t.pk.therapeuticBand}
+            </span>
+          )}
+          {peakA && (
+            <span aria-hidden="true" className="absolute -translate-y-full whitespace-nowrap pb-1 pl-1 font-mono text-[10px] font-semibold text-ink-900" style={{ left: `${xPct(peakA.x)}%`, top: `${yPct(peakA.y)}%` }}>
+              Cmax <span className="font-normal text-ink-400">{pkA.tmax}h</span>
+            </span>
+          )}
+          {peakB && (
+            <span aria-hidden="true" className="absolute -translate-x-full -translate-y-full whitespace-nowrap pb-1 pr-1 font-mono text-[10px] font-semibold text-dur-700" style={{ left: `${xPct(peakB.x)}%`, top: `${yPct(peakB.y)}%` }}>
+              Cmax
+            </span>
+          )}
+          {troughA && (
+            <span aria-hidden="true" className="absolute translate-y-1 whitespace-nowrap pl-1 font-mono text-[9.5px] text-ink-400" style={{ left: `${xPct(troughA.x)}%`, top: `${yPct(troughA.y)}%` }}>
+              Cmin
+            </span>
           )}
         </div>
-
-        {/* ── PK Parameter Table ── */}
-        <div className="px-3 py-2 border-t border-slate-100">
-          <table className="w-full text-[10px]">
-            <thead>
-              <tr className="text-left text-slate-400 uppercase tracking-wider">
-                <th className="py-1 font-semibold">{t.pk.drugColumn}</th>
-                <th className="py-1 font-semibold text-center">t½</th>
-                <th className="py-1 font-semibold text-center">Tmax</th>
-                <th className="py-1 font-semibold text-center">{t.pk.bioavailColumn}</th>
-                <th className="py-1 font-semibold text-center">{t.pk.dosingColumn}</th>
-              </tr>
-            </thead>
-            <tbody className="font-mono text-slate-700">
-              {hasA && (
-                <tr className="border-t border-slate-100">
-                  <td className="py-1 font-sans font-medium">{lang === 'ko' && drugA.nameKr ? drugA.nameKr : drugA.name}</td>
-                  <td className="py-1 text-center">{pkA.halfLife}h</td>
-                  <td className="py-1 text-center">{pkA.tmax}h</td>
-                  <td className="py-1 text-center">{(pkA.bioavail * 100).toFixed(0)}%</td>
-                  <td className="py-1 text-center">{freqLabel(pkA.interval)}</td>
-                </tr>
-              )}
-              {hasB && (
-                <tr className="border-t border-slate-100">
-                  <td className="py-1 font-sans font-medium">{lang === 'ko' && drugB.nameKr ? drugB.nameKr : drugB.name}</td>
-                  <td className="py-1 text-center">{pkB.halfLife}h</td>
-                  <td className="py-1 text-center">{pkB.tmax}h</td>
-                  <td className="py-1 text-center">{(pkB.bioavail * 100).toFixed(0)}%</td>
-                  <td className="py-1 text-center">{freqLabel(pkB.interval)}</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Partial data notice */}
-        {(hasA !== hasB) && (
-          <div className="px-3 py-1.5 border-t border-slate-100 bg-amber-50/50">
-            <p className="text-[10px] text-amber-600 italic">
-              {t.pk.pkDataUnavailable.replace('{name}', !hasA ? drugA?.name : drugB?.name)}
-            </p>
-          </div>
-        )}
       </div>
-    </div>
+      <p className={`mt-1 text-center text-[10.5px] text-ink-400 ${mono}`} aria-hidden="true">{t.pk.timeAxis}</p>
+
+      {/* PK parameters — doubles as the legend */}
+      <table className="mt-4 w-full border-collapse text-left">
+        <thead>
+          <tr className="border-y border-ink-200">
+            <th scope="col" className="py-1.5 text-[11px] font-medium text-ink-500">{t.pk.drugColumn}</th>
+            <th scope="col" className="py-1.5 text-right font-mono text-[11px] font-medium text-ink-500">t½</th>
+            <th scope="col" className="py-1.5 text-right font-mono text-[11px] font-medium text-ink-500">Tmax</th>
+            <th scope="col" className="hidden py-1.5 text-right text-[11px] font-medium text-ink-500 sm:table-cell">{t.pk.bioavailColumn}</th>
+            <th scope="col" className="py-1.5 pl-3 text-right text-[11px] font-medium text-ink-500">{t.pk.dosingColumn}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ key, pk, drug }) => (
+            <tr key={key} className="border-b border-ink-100">
+              <td className="py-2 pr-2">
+                <span className="flex items-center gap-2 text-[12.5px] font-medium text-ink-900">
+                  <Swatch series={key} />
+                  <span className="truncate">{nameOf(drug)}</span>
+                </span>
+              </td>
+              <td className="py-2 text-right font-mono text-[12px] text-ink-800 tnum">{pk.halfLife}h</td>
+              <td className="py-2 text-right font-mono text-[12px] text-ink-800 tnum">{pk.tmax}h</td>
+              <td className="hidden py-2 text-right font-mono text-[12px] text-ink-800 tnum sm:table-cell">{(pk.bioavail * 100).toFixed(0)}%</td>
+              <td className="whitespace-nowrap py-2 pl-3 text-right text-[12px] text-ink-700">{freqLabel(pk.interval)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {hasA && (
+        <p className="mt-2 flex items-center gap-2 text-[11.5px] text-ink-500">
+          <span aria-hidden="true" className="h-2 w-4 shrink-0 border-y border-dashed border-emerald-500/60 bg-emerald-500/10" />
+          <span>
+            {t.pk.therapeuticWindow} <span className="font-mono tnum">({(therapMinA * 100).toFixed(0)}–{(therapMaxA * 100).toFixed(0)}% Cmax)</span>
+          </span>
+        </p>
+      )}
+
+      {hasA !== hasB && (
+        <p className="mt-2 text-[12px] text-amber-700">
+          {t.pk.pkDataUnavailable.replace('{name}', !hasA ? drugA?.name : drugB?.name)}
+        </p>
+      )}
+    </figure>
   );
 }

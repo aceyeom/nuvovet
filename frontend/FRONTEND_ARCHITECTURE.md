@@ -8,31 +8,39 @@ nuvovet is a veterinary software platform for companion animals (dogs and cats).
 
 | Brand | Colour token | Status | What it is |
 |-------|--------------|--------|-----------|
-| **nuvovet** | `ink` (monochrome) | — | Master brand. Dog mark + wordmark, vectorised from `assets/branding/nuvovet_final.svg`. |
-| **nuvovet DUR** | `dur` (teal) | Live | Drug Utilization Review that runs on top of the clinic's existing EMR, surfaced through the **DUR island**. |
-| **nuvovet Claims** | `claims` (violet) | Coming soon | Pet-insurance claims assembled from the visit record (marketing preview + waitlist only). |
+| **nuvovet** | `ink` (monochrome) | — | Master brand. The official wordmark (`NuvovetWordmark`, vectorised from `assets/branding/nuvovet_final.svg`). There is no pictorial mark. |
+| **nuvo<span>DUR</span>** | `dur` (teal) | Live | Drug utilization review that docks on top of the clinic's existing EMR, surfaced through the **nuvoDUR island**. |
+| **nuvo<span>Claim</span>** | `claims` (violet) | Coming soon | Pet-insurance claims assembled from the visit record (marketing preview + waitlist only). |
 
-Lockups are rendered by `ProductLockup` (`components/NuvovetLogo.jsx`): the master wordmark stays ink, the product word carries the product colour ("nuvovet **DUR**", "nuvovet **Claims**"). `ProductGlyph` provides the squircle product icons; `ProductTag` the compact colour-coded chips.
+Product names are set in type, never as icons or badges (`components/NuvovetLogo.jsx`):
+
+- `ProductLockup` — bold "nuvo" + the product word in its colour ("nuvo**DUR**", "nuvo**Claim**"); sizes `xs`–`2xl`, `tone="dark"` for dark surfaces.
+- `ProductName` — the same, inline inside running text (inherits size and weight).
+- `BrandText` — colours every "nuvoDUR" / "nuvoClaim" inside a plain i18n string.
+
+The favicon is a geometric "n" on an ink square with a teal rule.
 
 ---
 
 ## Design Philosophy
 
-**Clinical, calm, colour with meaning.** Neutral ink on white/`#f7f8fa`, one accent per product line. Severity colours (red / amber / yellow / emerald) are reserved for clinical meaning and never reused as brand colours.
+**Clinical, calm, colour with meaning.** One accent per product line; severity colours (red / amber / yellow / emerald) are reserved for clinical meaning.
+
+**Type does the talking.** No pill chips with dots, no status pills, no icon tiles, no decorative icon sets. Structure comes from typography: `kicker` micro-labels (mono caps for Latin; Pretendard with tight tracking for Hangul, see `.kicker` in `index.css`), coloured severity words (CRITICAL / 심각), large tabular numbers, hairline rules, ruled lists and real tables. Status is written as a word ("AVAILABLE NOW", "PASS", "FLAG"). Typographic arrows (→) are the only glyphs.
 
 **What is what.** Three visual layers are kept distinct everywhere:
 
 | Layer | Look | Example |
 |-------|------|---------|
-| nuvovet (marketing / chrome) | Ink + product colours, Pretendard, generous radius | Landing, product bar above the demo |
-| The clinic's EMR (simulated) | Neutral greys + classic EMR blue (`emr.*` tokens), dense tables | `/demo` workspace, hero capture |
-| nuvovet DUR island | Near-black capsule (`island.*` tokens) floating on top of the EMR | Every alert / status |
+| nuvovet (marketing / chrome) | Ink + product colours, Pretendard; the hero is a dark sci-fi stage | Landing, the dark bar above the demo |
+| The clinic's EMR (simulated) | A classic Windows desktop app (`emr.*` tokens): title bar + window controls, menu bar, F-key toolbar, grey grid headers, label/value registration form, square corners, 12 px type | `/demo`, the hero capture |
+| nuvoDUR | Near-black island (`island.*` tokens) docked across the EMR window's top edge, plus glowing outlines drawn *over* flagged EMR rows | Every alert / status |
 
-**Severity = visual weight.** Critical findings dominate; minor ones compress to a single line.
+The EMR never contains nuvoDUR elements; nuvoDUR is always an overlay (the island and the `.dur-row-overlay` boxes measured over grid rows).
 
-**Mobile-first.** Every layout is designed for phones first. The hero capture switches to a portrait "mobile EMR" frame on phones so an expanded island always fits.
+**Mobile-first.** Every layout works on phones: the EMR collapses to a compact grid and a narrow registration form, the hero switches to a portrait capture with a one-line engine read-out.
 
-**Motion with restraint.** Spring-based island morphs (CSS `linear()` spring with a cubic-bezier fallback), blur crossfades, scroll reveals. `prefers-reduced-motion` disables animation globally; the hero then shows a static frame with manually steppable chapters.
+**Motion.** Spring-based island morphs (CSS `linear()` spring with a cubic-bezier fallback) and blur crossfades; the hero adds a boot sequence, aurora, particles, a rolling grid floor and HUD instruments. Everything pauses off-screen; `prefers-reduced-motion` shows still frames with manually steppable chapters.
 
 ---
 
@@ -40,61 +48,91 @@ Lockups are rendered by `ProductLockup` (`components/NuvovetLogo.jsx`): the mast
 
 ### 1. Landing Page (`/`)
 
-1. **Nav** — product links colour-coded by sub-brand (nuvovet DUR · Live, nuvovet Claims · Soon), How it works, Live demo, Clinic sign-in, primary "Try the live demo". The mobile menu explains every destination in one line (demo = no login, clinic sign-in = access code, request access = credentials).
-2. **Hero** — headline + subhead + CTAs, then `HeroShowcase`: a scripted capture of nuvovet DUR on a clinic EMR (see below), labelled "Your clinic's EMR" and "nuvovet DUR — the layer on top".
-3. **Stats + evidence line** (877+ products, 10 rules, 8 engines, 2 species).
-4. **Product family** — nuvovet DUR (live) and nuvovet Claims (coming soon) cards.
-5. **nuvovet DUR** — 01 How the island works (glance / alert / expand), 02 What every scan checks (five engines bento), 03 Every drug, every source (six-case pipeline + severity scale).
-6. **nuvovet Claims** — preview built from the same visit record the hero ends on, waitlist CTA.
-7. **Demo band**, final CTA, footer.
+1. **Nav** — nuvovet wordmark, product links (nuvoDUR / nuvoClaim, product word coloured), How it works, Live demo, Clinic sign-in, Request access. The mobile menu explains every destination in one line.
+2. **Hero** (`landing/Hero.jsx`, dark) — kicker line, decrypting headline (scrambled glyphs resolve into the text without layout shift, `DecryptText` in `landing/motion.jsx`), subhead, a glowing conic-border CTA to the demo, request access, meta line; then `HeroShowcase` (below).
+3. **Sections** (`landing/Sections.jsx`) — stats, product family, how the island works, engines, coverage, nuvoClaim preview, demo band, final CTA, footer.
 
 ### 2. Live EMR demo (`/demo`)
 
-A simulated clinic EMR with nuvovet DUR docked on top. No login, no wizard:
+A simulated clinic EMR with nuvoDUR docked on top. No login, no wizard:
 
-- **Product bar** (nuvovet chrome): "nuvovet DUR · Live demo", guide, language, full report, request access.
-- **EMR window** (simulated third-party product): title bar with the island in the centre, menu bar, today's waiting list (7 patients with per-patient DUR status), patient banner (동물번호, 동물등록번호, owner, DOB, blood type, vet, insurance, allergy / condition badges), tabs: Visit note (SOAP + vitals), Tx/Rx, Labs (reference intervals, H/L flags, range bars), History (past visits with DUR outcome).
-- **Tx/Rx** mirrors Korean EMR fields: 구분 · 처치/처방명 · 단위 · 투여량 · 계산량 (dose × weight) · 일수 · 횟수 · 경로 · 금액, plus TX lines (진찰/검사/처치) and a VAT/total footer. Doses and days are editable inline; drug search uses the local formulary; each patient has a dashed "Try this" chip that triggers the case's teaching point.
-- **First-run guide** (3 spotlight steps: this is the EMR → the black island is nuvovet DUR → try it). Stored in `localStorage` (`nuvovet-demo-guide-v2`), re-openable via "Guide".
+- **nuvoDUR bar** (dark): back to nuvovet, nuvoDUR lockup, "Live demo", the patient's **Scenario** button (e.g. "Allergy flare — add Prednisolone →"), Guide, language, Full report, Request access. On phones the scenario sits on a second row.
+- **EMR window** — a Windows desktop EMR: title bar (`Clinic EMR 4.2 | Demo Animal Hospital — Consult — Buddy (1548)`) with window controls, menu bar (파일(F) 편집(E) …), F-key toolbar (접수 F2 · 진료 F3 · 수납 F4 …), 진료대기 grid (time · patient · owner · status), 보호자 정보 panel (phone, address, visits, 미수금, 적립금, insurance), registration form with the patient's **real photo** (동물번호 · 동물이름 · 종 · 품종 "GOLDEN RETRIEVER/골든 리트리버" · 성별 · 나이 · 체중 · 생년월일 · 보호자 · 담당의 · 혈액형 · 동물등록번호 · 알레르기 · 주요질환), classic tabs (진료기록 · 처치/처방 · 검사결과 · 진료이력), status bar (준비 · 서버 · 진료실 · 사용자 · clock).
+- **처치/처방** — visit strip (진료일자 · 구분 · 접수 · 담당의 · 주호소), 처방 검색 (results grid: 상품명 · 성분명 · 분류) with 자주 쓰는 처방 links, the TX/RX grid with the real column set (No · 폴더명 · 이름(Tx/Rx) · 단위 · 투여량 · 계산량 · 일수 · 횟수 · 경로 · 전체 · VAT · 금액 · 삭제; mid/compact column sets on tablets/phones), totals, 행 추가 / 행 삭제 / 이전 처방 불러오기 / 처방전 출력 / 저장 (F9), and 처방 메모 · 복약지도.
+- **nuvoDUR island** docked across the window's top edge (centre of the title bar, which the EMR leaves empty). Flagged rows get a measured overlay box in the severity colour; the rows of the finding open in the island glow.
+- **First-run guide** (3 spotlight steps: the grey window is the EMR → the black island on top is nuvoDUR → run the scenario). Stored in `localStorage` (`nuvovet-demo-guide-v3`), re-openable via "Guide".
 - **Full report** opens `ResultsDisplay` in a sheet (`embedded` mode) including patient-context checks.
 
 ### 3. Clinic workspace (`/system`)
 
-Access-code protected (`vetdur2025`). Split sign-in screen explains the workspace vs. the public demo. After sign-in: three numbered cards — 1 Patient, 2 Prescription, 3 Run DUR — then the analysis screen and the report. Drug search hits the FastAPI backend and falls back to the local formulary when it is unreachable.
+Access-code protected (`vetdur2025`). After sign-in: patient, prescription, run DUR, then the analysis screen and the report. Drug search hits the FastAPI backend and falls back to the local formulary when it is unreachable.
 
-### 4. Request access / Claims waitlist (Modal)
+### 4. Request access / nuvoClaim waitlist (Modal)
 
 `RequestAccessModal` takes `product` (`'dur'` | `'claims'`) and posts it to Formspree with the request so leads can be routed per product line.
 
 ---
 
-## nuvovet DUR Island
+## nuvoDUR Island
 
 `components/dur/` — the Dynamic-Island-style overlay that sits on top of the EMR.
 
 | File | Role |
 |------|------|
-| `DurIsland.jsx` | Presentational island. Views: `compact` (pill), `summary` (all clear), `list` (all findings), `expanded` (one finding with why + fix). Measures its content, animates width/height/radius with the spring curve, crossfades content with blur. `role="region"`, Escape closes. |
-| `findings.js` | `analyzeRegimen()` — runs `durEngine` and adds patient-context findings: species hardstop / no species dose, charted allergies, drug–disease contraindications (CKD, MDR1, cardiomyopathy…), MDR1 status in herding breeds, dose outside the species range, cumulative renal load with elevated creatinine (same thresholds as `OrganLoadIndicator`). Each finding carries a one-tap `resolution` (`replace` / `remove` / `dose` / `add` / `ack`). |
-| `describe.js` | Localised copy for findings and resolutions (`t.island.*`). Pure functions shared by the hero and the demo. |
+| `DurIsland.jsx` | Presentational island. Views: `compact` (pill), `summary` (all clear), `list` (all findings), `expanded` (one finding with why + fix). Measures its content, animates width/height/radius with the spring curve, crossfades content with blur; a severity halo (breathing for critical) sits outside the clipped surface. `role="region"`, Escape closes. |
+| `findings.js` | `analyzeRegimen()` — runs `durEngine` and adds patient-context findings: species hardstop / no species dose, charted allergies, drug–disease contraindications (CKD, MDR1, cardiomyopathy…), MDR1 status in herding breeds, dose outside the species range, cumulative renal load with elevated creatinine. Each finding carries a one-tap `resolution` (`replace` / `remove` / `dose` / `add` / `ack`). |
+| `describe.js` | Localised copy for findings and resolutions (`t.island.*`), including `kindLabel`. Pure functions shared by the hero and the demo. |
 | `useDurMonitor.js` | Live behaviour for the demo: re-screens on every chart change (short "checking" beat), auto-expands only for findings that are new since the last screen, auto-collapses after ~9 s unless hovered, remembers acknowledgements per patient, applies resolutions via a callback. |
 
-Island states: idle/clear (teal mark / green check) → checking (spinner + shimmer) → alert glance (severity dot, drug pair, +N) → expanded card (severity chip, title, drugs, why, suggested fix, Replace/Stop/Adjust · Acknowledge · Full report, citation) → applied/reviewed flash.
+Island language (no dots, no icons):
+
+| State | Compact pill |
+|-------|--------------|
+| idle / clear | `nuvoDUR │ No issues · 3 meds` ("No issues" in green) |
+| checking | `nuvoDUR │ Screening 3 meds…` + a sliding scanner segment |
+| alert | `CRITICAL │ Meloxicam + Prednisolone +1` (severity word in colour, red halo) |
+| reviewed / applied | `nuvoDUR │ Applied · Meloxicam → Gabapentin` |
+
+Expanded card: severity word + kind ("CRITICAL │ Drug interaction"), ← 1/2 → and Close as text buttons, title, drugs joined by ×, the why, a teal-ruled **Suggested fix** block, Replace / Acknowledge buttons, Full report →, citation in mono.
 
 ---
 
 ## Hero showcase (`components/landing/HeroShowcase.jsx`)
 
-A scripted ~14 s loop built from the real EMR components and the real engine (the alert text is what `analyzeRegimen` returns for Buddy + prednisolone):
+A scripted capture built from the real EMR components and the real engine (the alert text is what `analyzeRegimen` returns for Buddy + prednisolone).
+
+**Boot sequence** (once, when a third of the EMR window is in view): a CRT power-on line → the window opens onto a boot log (`[ OK ] Clinic EMR 4.2 · session restored`, `nuvoDUR · overlay attached`, formulary, rules, patient context, `> Monitoring prescriptions_`) with a progress line → a bright edge wipes the log away revealing the EMR with an RGB-split glitch → the island drops in and docks with a shockwave ring while the HUD instruments plug in. The camera rises from a 20° tilt as it boots.
+
+**Loop** (15 s, four chapters, per-chapter camera angles):
 
 | Chapter | Beat |
 |---------|------|
-| 01 Prescribe | Cursor types "Predn…" in the Rx search and adds prednisolone to Buddy's NSAID regimen |
-| 02 Check | Island screens the new line |
-| 03 Alert | Island expands: NSAID + corticosteroid; conflicting rows highlight |
-| 04 Resolve | "Replace" swaps meloxicam → gabapentin; island settles to "3 meds · No issues" |
+| 01 Prescribe | Cursor types "Predn…" in 처방 검색 and adds prednisolone to Buddy's NSAID regimen |
+| 02 Scan | A beam sweeps the EMR; every instrument reads SCANNING; circuit traces flow |
+| 03 Alert | Red shockwave + window pulse; island expands (NSAID + corticosteroid); flagged rows glow; DDI matrix, organ load (GI 88) and evidence panels FLAG |
+| 04 Resolve | "Replace" swaps meloxicam → gabapentin; a green wave washes the window; all instruments PASS; island settles to "No issues · 3 meds" |
 
-The EMR is rendered at a fixed design size and scaled to fit (portrait variant on phones); the island is rendered unscaled on top so it stays legible. The clickable chapter scrubber jumps the timeline; play/pause is available; playback pauses off-screen and on hidden tabs; the scroll-linked tilt settles the frame flat as the page scrolls.
+**HUD instruments** (≥1180 px, either side of the window, wired to the island by circuit traces): 01 DDI matrix, 02 CYP450 load, 03 Species · breed, 04 Dose (dose × weight = mg against the range), 05 Organ load (renal / hepatic / GI), 06 Evidence (the finding's citation). Phones get a one-line read-out instead.
+
+**Backdrop** (`HeroBackdrop.jsx`): aurora mesh (four light sources on separate clocks), a canvas particle field with data streaks, rotating HUD rings, a perspective grid floor rolling toward the viewer, scanlines, a refresh band, grain and vignette, with scroll parallax.
+
+Telemetry line (LIVE CAPTURE · simulated EMR · `T+00:04.21` timecode written straight to the DOM · CH 02/04), a chapter scrubber (progress hairlines, jump to any chapter, Pause/Play as text). Everything pauses off-screen and on hidden tabs; reduced motion shows a static chapter-3 frame.
+
+---
+
+## Patient photos (`data/patientPhotos.js`)
+
+Real photographs from Unsplash (Unsplash License — free for commercial use; photographers credited in the module and in alt text), matched to each breed and hotlinked from the Unsplash CDN with `crop=entropy` square crops. `PatientPhoto` falls back to a plain initial box if an image cannot load.
+
+| Patient | Breed | Photographer |
+|---------|-------|--------------|
+| Buddy | Golden Retriever | Richard Brutyo |
+| Max | Australian Shepherd | Joakim Nådell |
+| Coco | French Bulldog | speckfechta |
+| Oscar | Dachshund | Kevin Jackson |
+| Mochi | Korean Shorthair (tabby) | Jae Park |
+| Luna | Persian | Rana Sawalha |
+| Nabi | Siamese | Alex Meier |
 
 ---
 
@@ -210,10 +248,10 @@ These fields power the Drug Timeline feature and match the JSONL → Drug contra
 
 Seven cases in today's appointment order. Each carries Korean-EMR registration fields, bilingual SOAP / complaint / history, labs with species reference intervals (status is derived from the interval), weight trend, priced Tx lines and an Rx list, plus a **scenario** that triggers its teaching point:
 
-| Patient | Case focus | Current Rx | "Try this" | nuvovet DUR result |
+| Patient | Case focus | Current Rx | "Try this" | nuvoDUR result |
 |---------|-----------|-----------|-----------|--------------------|
 | Buddy · Golden Retriever | NSAID + steroid | Meloxicam, Omeprazole | + Prednisolone | Critical — replace meloxicam → gabapentin |
-| Max · Shetland Sheepdog | MDR1 · renal · allergy | Prednisolone, Metronidazole, Enalapril | + Ivermectin (or Amoxicillin) | Critical MDR1 → selamectin; penicillin allergy; renal load |
+| Max · Australian Shepherd | MDR1 · renal · allergy | Prednisolone, Metronidazole, Enalapril | + Ivermectin (or Amoxicillin) | Critical MDR1 → selamectin; penicillin allergy; renal load |
 | Coco · French Bulldog | CYP3A4 inhibition | Prednisolone, Amoxicillin, Ketoconazole | + Cyclosporine | Moderate ×2 — reduce substrate dose 50% |
 | Oscar · Dachshund | Serotonin syndrome | Meloxicam, Gabapentin, Tramadol | + Trazodone | Critical — stop tramadol |
 | Mochi · Korean Shorthair | Renal load · drug–disease | Methimazole, Amlodipine, Maropitant | + Meloxicam | Critical renal load; meloxicam in CKD |
@@ -449,21 +487,25 @@ src/
 │
 ├── pages/
 │   ├── Landing.jsx                  # Platform page: hero + DUR / Claims sections
-│   ├── Demo.jsx                     # Live simulated EMR with the DUR island + guide + report sheet
+│   ├── Demo.jsx                     # Simulated EMR with the nuvoDUR island, scenario, guide, report sheet
 │   ├── FullSystem.jsx               # Clinic workspace (API-backed search)
 │   └── Patients.jsx                 # Saved patient profiles (localStorage)
 │
 ├── components/
-│   ├── NuvovetLogo.jsx              # Dog mark, wordmark, ProductLockup / ProductGlyph / ProductTag
+│   ├── NuvovetLogo.jsx              # Wordmark, ProductLockup / ProductName / BrandText
 │   ├── dur/
 │   │   ├── DurIsland.jsx            # Morphing island overlay
 │   │   ├── findings.js              # Engine + patient-context findings, resolutions
 │   │   ├── describe.js              # Localised finding copy
 │   │   └── useDurMonitor.js         # Live island behaviour for the demo
 │   ├── emr/
-│   │   └── EmrUI.jsx                # Simulated EMR: chrome, waiting list, banner, tabs, Rx table/search, SOAP, labs, history
+│   │   └── EmrUI.jsx                # Simulated Windows EMR: title/menu/toolbar/status bars, waiting list, client panel,
+│   │                                #   registration form + photo, tabs, visit strip, Rx search, TX/RX grid (+ nuvoDUR overlay), memo, SOAP, labs, history
 │   ├── landing/
-│   │   ├── HeroShowcase.jsx         # Scripted EMR + island capture with chapter scrubber
+│   │   ├── Hero.jsx                 # Dark hero: decrypting headline, CTAs, showcase
+│   │   ├── HeroBackdrop.jsx         # Aurora, particle canvas, HUD rings, grid floor, scanlines
+│   │   ├── HeroShowcase.jsx         # Boot sequence + scripted EMR/island capture, HUD instruments, chapter scrubber
+│   │   ├── motion.jsx               # usePrefersReducedMotion, DecryptText
 │   │   ├── SiteChrome.jsx           # Site nav (incl. mobile menu) + footer
 │   │   └── Sections.jsx             # Stats, product family, island states, engines, coverage, Claims, demo band, CTA
 │   ├── ResultsDisplay.jsx           # DUR report (embedded mode, context checks)
@@ -482,6 +524,7 @@ src/
 │   ├── drugDatabase.js              # 28 curated drugs (demo + fallback)
 │   ├── breedProfiles.js             # 7 demo patients with EMR detail + scenarios
 │   ├── emrCatalog.js                # EMR product names, prices, line maths
+│   ├── patientPhotos.js             # Unsplash patient photos + credits
 │   └── emrSchema.js                 # EMR enums and dose helpers
 │
 ├── utils/

@@ -1,261 +1,289 @@
-import React, { useState } from 'react';
-import { Download, X, Printer, CheckCircle, AlertTriangle, FileText } from 'lucide-react';
+import React from 'react';
 import { useI18n } from '../i18n';
-import { DOG_PATH } from './NuvovetLogo';
 
 /**
- * Scan Export to PDF
+ * Scan export (print / save as PDF)
  *
- * Generates a formatted single-page PDF of the scan result —
- * patient name, date, drugs, interactions found, pharmacist
- * acknowledgment.  Creates a paper trail suitable for the patient
- * file and the MFDS retrospective trial dataset.
+ * Builds a dedicated A4 document for the scan — patient, result,
+ * interactions, patient-context findings, the prescription and a
+ * signature block for the prescribing veterinarian. It is the paper
+ * trail for the patient file and the MFDS retrospective trial dataset.
  *
- * Uses a popup window with dedicated print HTML so the layout is
- * completely independent from the screen UI.
+ * The document opens in its own window so its layout is independent of
+ * the screen UI; the browser's print dialog saves it as a PDF.
  */
 
-function buildPrintHTML({ results, patientInfo, drugs, species }) {
+const esc = (v) => String(v ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const fmt = (s, vars) => String(s ?? '').replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
+
+/** Stable, human-readable ID for one analysis run (same on screen and on paper). */
+export function reportId(results) {
+  const ms = Date.parse(results?.timestamp) || 0;
+  return `NV-${ms.toString(36).toUpperCase().slice(-7)}`;
+}
+
+const SEV = {
+  critical: { hex: '#b91c1c', rule: '#dc2626' },
+  moderate: { hex: '#b45309', rule: '#f59e0b' },
+  minor: { hex: '#a16207', rule: '#eab308' },
+  unknown: { hex: '#5b6678', rule: '#bac1cc' },
+  none: { hex: '#047857', rule: '#10b981' },
+};
+const sevKey = (label) => {
+  const l = String(label?.label ?? label ?? '').toLowerCase();
+  return SEV[l] ? l : l === 'clear' ? 'none' : 'unknown';
+};
+
+function buildPrintHTML({ results, patientInfo, drugs = [], contextFindings = [], t, lang }) {
+  const R = t.results;
+  const P = R.pdf;
   const { interactions, drugFlags, confidenceScore, timestamp } = results;
-  const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'long', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+  const locale = lang === 'ko' ? 'ko-KR' : 'en-GB';
+  const dateStr = new Date(timestamp).toLocaleString(locale, {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+  const n = drugFlags.length;
+  const pairs = (n * (n - 1)) / 2;
+  const sevWord = (k) => R.sev?.[k] ?? k;
 
-  const criticalCount = interactions.filter(i => i.severity?.label === 'Critical').length;
-  const moderateCount = interactions.filter(i => i.severity?.label === 'Moderate').length;
-  const minorCount = interactions.filter(
-    i => i.severity?.label === 'Minor' || i.severity?.label === 'Unknown'
-  ).length;
+  const count = (k) =>
+    interactions.filter((i) => sevKey(i.severity) === k).length +
+    contextFindings.filter((f) => sevKey(f.severity) === k).length;
+  const counts = { critical: count('critical'), moderate: count('moderate'), minor: count('minor') + count('unknown') };
 
-  const severityColor = (label) => {
-    if (label === 'Critical') return '#dc2626';
-    if (label === 'Moderate') return '#d97706';
-    return '#64748b';
-  };
+  // Overall: worst of engine result and patient-context findings
+  const rank = { critical: 4, moderate: 3, unknown: 2, minor: 1, none: 0 };
+  const overall = [sevKey(results.overallSeverity), ...contextFindings.map((f) => sevKey(f.severity))]
+    .reduce((a, b) => (rank[b] > rank[a] ? b : a), 'none');
 
-  const interactionRows = interactions.map((ix) => `
-    <tr>
-      <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; font-weight:600; color:${severityColor(ix.severity?.label)}">
-        ${ix.severity?.label ?? 'Unknown'}
-      </td>
-      <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; font-weight:500; color:#0f172a">
-        ${ix.drugA} + ${ix.drugB}
-      </td>
-      <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; color:#475569; font-size:11px">
-        ${ix.rule ?? ''}
-      </td>
-      <td style="padding:8px 10px; border-bottom:1px solid #f1f5f9; color:#475569; font-size:11px; max-width:200px">
-        ${typeof ix.recommendation === 'string' ? ix.recommendation.slice(0, 120) + (ix.recommendation.length > 120 ? '...' : '') : ''}
-      </td>
-    </tr>
-  `).join('');
+  const confKey = confidenceScore >= 85 ? 'confidenceHigh' : confidenceScore >= 60 ? 'confidenceModerate' : 'confidenceLow';
+  const confHex = confidenceScore >= 85 ? '#047857' : confidenceScore >= 60 ? '#b45309' : '#b91c1c';
 
-  const drugRows = drugFlags.map((df) => `
-    <tr>
-      <td style="padding:6px 10px; border-bottom:1px solid #f8fafc; font-weight:500; color:#334155">${df.drugName}</td>
-      <td style="padding:6px 10px; border-bottom:1px solid #f8fafc; color:#64748b; font-size:11px">
-        ${df.flags.map(f => f.label).join(', ') || '—'}
-      </td>
-      <td style="padding:6px 10px; border-bottom:1px solid #f8fafc; color:#64748b; font-size:11px">
-        ${df.hasSpeciesWarning ? 'Species note present' : '—'}
-      </td>
-    </tr>
-  `).join('');
+  const kv = (k, v) => (v ? `<tr><th>${esc(k)}</th><td>${v}</td></tr>` : '');
+  const species = patientInfo?.species ? (patientInfo.species === 'dog' ? t.species.dog : t.species.cat) : '';
 
-  const confLevel = confidenceScore >= 85 ? 'High' : confidenceScore >= 60 ? 'Moderate' : 'Low';
-  const confColor = confidenceScore >= 85 ? '#059669' : confidenceScore >= 60 ? '#d97706' : '#dc2626';
+  const ixRows = interactions.map((ix) => {
+    const k = sevKey(ix.severity);
+    return `
+      <tr style="--rule:${SEV[k].rule}">
+        <td class="sev" style="color:${SEV[k].hex}">${esc(sevWord(k))}</td>
+        <td><strong>${esc(ix.drugA)} + ${esc(ix.drugB)}</strong><div class="sub mono">${esc(ix.rule ?? '')}</div></td>
+        <td>${esc(ix.recommendation ?? '')}</td>
+      </tr>`;
+  }).join('');
+
+  const ctxRows = contextFindings.map((f) => {
+    const k = sevKey(f.severity);
+    return `
+      <tr style="--rule:${SEV[k].rule}">
+        <td class="sev" style="color:${SEV[k].hex}">${esc(sevWord(k))}</td>
+        <td><strong>${esc(f.title)}</strong>${f.drugsLabel ? `<div class="sub">${esc(f.drugsLabel)}</div>` : ''}</td>
+        <td>${esc(f.suggestion || f.summary || '')}</td>
+      </tr>`;
+  }).join('');
+
+  const sourceWord = (s) => (s === 'human_offlabel' ? t.drugInput.offLabel : s === 'foreign' ? t.drugInput.foreignDrug : s === 'unknown' ? t.drugInput.sourceUnknown : t.drugInput.koreanApproved);
+  const rxRows = drugFlags.map((df, i) => {
+    const drug = drugs.find((d) => d.id === df.drugId);
+    const dose = parseFloat(drug?.dosePerKg);
+    return `
+      <tr>
+        <td class="mono num">${String(i + 1).padStart(2, '0')}</td>
+        <td><strong>${esc(df.drugName)}</strong>${df.speciesNote ? `<div class="sub">${esc(df.speciesNote)}</div>` : ''}</td>
+        <td class="mono">${esc(df.drugClass ?? '')}</td>
+        <td>${esc(sourceWord(df.source))}</td>
+        <td>${df.flags.length ? esc(df.flags.map((f) => f.label).join(' · ')) : '<span class="muted">—</span>'}</td>
+        <td class="mono num">${dose > 0 ? `${esc(dose)} mg/kg` : '<span class="muted">—</span>'}</td>
+      </tr>`;
+  }).join('');
+
+  const conditions = patientInfo?.conditions?.length ? esc(patientInfo.conditions.join(', ')) : '';
+  const allergies = patientInfo?.allergies?.length ? esc(patientInfo.allergies.join(', ')) : '';
+  const labs = patientInfo?.flaggedLabs?.length
+    ? patientInfo.flaggedLabs.map((l) => `${esc(l.key)} ${esc(l.value)} ${esc(l.unit)}${l.status === 'high' ? ' ↑' : l.status === 'low' ? ' ↓' : ''}`).join(', ')
+    : '';
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${lang === 'ko' ? 'ko' : 'en'}">
 <head>
   <meta charset="UTF-8" />
-  <title>nuvovet DUR Report — ${patientInfo?.name ?? 'Patient'}</title>
+  <title>${esc(P.docTitle)} — ${esc(patientInfo?.name || R.untitledPatient)} — ${esc(reportId(results))}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-size: 12px;
-      color: #1e293b;
-      background: #fff;
-      padding: 32px;
-      line-height: 1.5;
+      font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Segoe UI', Roboto, sans-serif;
+      font-size: 11.5px; line-height: 1.55; color: #0b1220; background: #fff;
+      padding: 36px 40px; max-width: 900px; margin: 0 auto;
+      word-break: keep-all; overflow-wrap: break-word;
     }
-    h1 { font-size: 18px; font-weight: 700; color: #0f172a; }
-    h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-bottom: 8px; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 2px solid #0f172a; margin-bottom: 20px; }
-    .logo { display: flex; align-items: center; gap: 8px; }
-    .logo-hex { width: 28px; height: 28px; }
-    .logo-name { font-size: 17px; font-weight: 800; letter-spacing: -0.03em; color: #0b1220; }
-    .meta { font-size: 11px; color: #64748b; text-align: right; line-height: 1.6; }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-    .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; }
-    .kv { display: flex; justify-content: space-between; margin-bottom: 4px; }
-    .kv .k { color: #64748b; font-size: 11px; }
-    .kv .v { font-weight: 600; color: #1e293b; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    thead th {
-      text-align: left;
-      padding: 8px 10px;
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #64748b;
-      background: #f8fafc;
-      border-bottom: 2px solid #e2e8f0;
-    }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
-    .badge-ok { background: #dcfce7; color: #166534; }
-    .badge-warn { background: #fef9c3; color: #854d0e; }
-    .badge-crit { background: #fee2e2; color: #991b1b; }
-    .footer { border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 24px; display: flex; justify-content: space-between; align-items: center; }
-    .sign-box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 16px; min-width: 220px; }
-    .sign-label { font-size: 10px; color: #94a3b8; margin-bottom: 20px; }
-    .sign-line { border-top: 1px solid #334155; margin-top: 4px; padding-top: 4px; font-size: 10px; color: #94a3b8; }
-    .disclaimer { font-size: 10px; color: #94a3b8; max-width: 380px; line-height: 1.5; }
-    .conf-bar { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin-top: 4px; }
-    .conf-fill { height: 100%; border-radius: 3px; }
+    .mono { font-family: 'Geist Mono Variable', SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+    .kicker { font-size: 9.5px; font-weight: 700; letter-spacing: ${lang === 'ko' ? '0.02em' : '0.14em'}; text-transform: uppercase; color: #5b6678; }
+    .muted { color: #8a93a3; }
+    .sub { font-size: 10.5px; color: #5b6678; margin-top: 2px; font-weight: 400; }
+
+    header { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; padding-bottom: 14px; border-bottom: 2px solid #0b1220; }
+    .lockup { font-size: 24px; font-weight: 800; letter-spacing: -0.035em; line-height: 1; }
+    .lockup .dur { color: #0b847f; }
+    .tagline { margin-top: 6px; font-size: 10.5px; color: #5b6678; }
+    .meta { text-align: right; }
+    .meta .id { font-size: 13px; font-weight: 600; margin-top: 2px; }
+    .meta .date { font-size: 10.5px; color: #5b6678; margin-top: 2px; }
+
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding: 18px 0; border-bottom: 1px solid #dce1e8; }
+    table.kv { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    table.kv th { text-align: left; font-weight: 400; color: #5b6678; width: 38%; padding: 3px 12px 3px 0; vertical-align: top; }
+    table.kv td { padding: 3px 0; font-weight: 600; vertical-align: top; }
+    .verdict { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; margin-top: 8px; padding-left: 10px; border-left: 3px solid var(--rule); }
+    .counts { margin-top: 10px; display: flex; gap: 18px; }
+    .counts b { font-size: 15px; display: block; }
+
+    section { padding-top: 18px; break-inside: auto; }
+    h2 { margin-bottom: 8px; }
+    table.list { width: 100%; border-collapse: collapse; }
+    table.list thead th { text-align: left; font-size: 9.5px; font-weight: 600; color: #5b6678; padding: 6px 10px 6px 0; border-top: 1px solid #0b1220; border-bottom: 1px solid #dce1e8; }
+    table.list td { padding: 8px 10px 8px 0; border-bottom: 1px solid #edf0f4; vertical-align: top; }
+    table.list tr { break-inside: avoid; }
+    table.list td.sev { font-size: 9.5px; font-weight: 700; letter-spacing: ${lang === 'ko' ? '0.02em' : '0.12em'}; text-transform: uppercase; white-space: nowrap; border-left: 3px solid var(--rule, transparent); padding-left: 8px; width: 92px; }
+    table.list td.num { white-space: nowrap; }
+    .clear { padding: 10px 0 2px 10px; border-left: 3px solid #10b981; }
+    .clear strong { color: #047857; }
+
+    footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid #0b1220; display: grid; grid-template-columns: 1.1fr 1fr; gap: 32px; break-inside: avoid; }
+    .sign .line { border-bottom: 1px solid #0b1220; height: 30px; }
+    .sign .label { font-size: 9.5px; color: #5b6678; margin-top: 4px; }
+    .sign .row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 14px; }
+    .disclaimer { font-size: 10px; color: #5b6678; line-height: 1.6; }
+    .disclaimer .brand { margin-top: 10px; color: #0b1220; font-weight: 700; }
+
     @media print {
-      body { padding: 16px; }
-      @page { margin: 1cm; size: A4; }
+      body { padding: 0; max-width: none; }
+      @page { margin: 14mm 14mm 16mm; size: A4; }
     }
   </style>
 </head>
 <body>
-
-  <!-- Header -->
-  <div class="header">
+  <header>
     <div>
-      <div class="logo">
-        <svg class="logo-hex" viewBox="-3 -3 317 338" width="26" height="28" fill="#0B1220"><path fill-rule="evenodd" d="${DOG_PATH}"/></svg>
-        <div>
-          <div class="logo-name">nuvovet</div>
-          <div style="font-size:10px;color:#64748b">Drug Utilization Review System</div>
-        </div>
-      </div>
+      <div class="lockup">nuvo<span class="dur">DUR</span></div>
+      <div class="tagline">${esc(P.tagline)}</div>
     </div>
     <div class="meta">
-      <strong style="font-size:13px;color:#0f172a">DUR Analysis Report</strong><br/>
-      ${dateStr}<br/>
-      Document ID: NV-${Date.now().toString(36).toUpperCase()}
+      <div class="kicker">${esc(P.reportLabel)}</div>
+      <div class="id mono">${esc(reportId(results))}</div>
+      <div class="date">${esc(P.generated)} ${esc(dateStr)}</div>
     </div>
-  </div>
+  </header>
 
-  <!-- Patient + Summary grid -->
-  <div class="grid2">
-    <div class="card">
-      <h2>Patient</h2>
-      ${patientInfo?.name ? `<div class="kv"><span class="k">Name</span><span class="v">${patientInfo.name}</span></div>` : ''}
-      ${patientInfo?.species ? `<div class="kv"><span class="k">Species</span><span class="v">${patientInfo.species === 'dog' ? 'Canine' : 'Feline'}</span></div>` : ''}
-      ${patientInfo?.breed ? `<div class="kv"><span class="k">Breed</span><span class="v">${patientInfo.breed}</span></div>` : ''}
-      ${patientInfo?.weight ? `<div class="kv"><span class="k">Weight</span><span class="v">${patientInfo.weight} kg</span></div>` : ''}
-      ${patientInfo?.conditions?.length ? `<div class="kv"><span class="k">Conditions</span><span class="v">${patientInfo.conditions.join(', ')}</span></div>` : ''}
+  <div class="cols">
+    <div>
+      <div class="kicker">${esc(R.patient)}</div>
+      <table class="kv">
+        ${kv(P.name, esc(patientInfo?.name || R.untitledPatient))}
+        ${kv(R.species, esc(species))}
+        ${kv(R.breed, esc(patientInfo?.breed))}
+        ${kv(R.weight, patientInfo?.weight ? `<span class="mono">${esc(patientInfo.weight)} kg</span>` : '')}
+        ${kv(R.conditions, conditions)}
+        ${kv(P.allergies, allergies)}
+        ${kv(R.flaggedLabs, labs)}
+      </table>
     </div>
-    <div class="card">
-      <h2>Scan Summary</h2>
-      <div class="kv"><span class="k">Drugs Screened</span><span class="v">${drugFlags.length}</span></div>
-      <div class="kv"><span class="k">Interactions Found</span><span class="v">${interactions.length}</span></div>
-      <div class="kv"><span class="k">Critical</span><span class="v" style="color:#dc2626">${criticalCount}</span></div>
-      <div class="kv"><span class="k">Moderate</span><span class="v" style="color:#d97706">${moderateCount}</span></div>
-      <div class="kv"><span class="k">Minor</span><span class="v">${minorCount}</span></div>
-      <div class="kv" style="margin-top:8px">
-        <span class="k">Confidence</span>
-        <span class="v" style="color:${confColor}">${confidenceScore}% — ${confLevel}</span>
+    <div>
+      <div class="kicker">${esc(R.overallSeverity)}</div>
+      <div class="verdict" style="--rule:${SEV[overall].rule}; color:${SEV[overall].hex}">${esc(sevWord(overall))}</div>
+      <div class="counts">
+        <div><b class="mono">${n}</b><span class="kicker">${esc(R.stat.drugs)}</span></div>
+        <div><b class="mono">${pairs}</b><span class="kicker">${esc(R.stat.pairs)}</span></div>
+        <div><b class="mono" style="color:${counts.critical ? SEV.critical.hex : '#0b1220'}">${counts.critical}</b><span class="kicker">${esc(sevWord('critical'))}</span></div>
+        <div><b class="mono" style="color:${counts.moderate ? SEV.moderate.hex : '#0b1220'}">${counts.moderate}</b><span class="kicker">${esc(sevWord('moderate'))}</span></div>
+        <div><b class="mono">${counts.minor}</b><span class="kicker">${esc(sevWord('minor'))}</span></div>
       </div>
-      <div class="conf-bar">
-        <div class="conf-fill" style="width:${confidenceScore}%;background:${confColor}"></div>
-      </div>
+      <table class="kv" style="margin-top:12px">
+        ${kv(R.confidence, `<span class="mono" style="color:${confHex}">${confidenceScore}%</span> — ${esc(R[confKey])}`)}
+      </table>
     </div>
   </div>
 
-  <!-- Interactions -->
-  ${interactions.length > 0 ? `
-  <h2>Interaction Report</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Severity</th>
-        <th>Drug Pair</th>
-        <th>Rule</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${interactionRows}
-    </tbody>
-  </table>
-  ` : `
-  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:20px">
-    <strong style="color:#166534">✓ No drug interactions detected</strong>
-    <p style="color:#15803d;font-size:11px;margin-top:4px">All ${drugFlags.length} drug pairs screened — no contraindications found.</p>
-  </div>
-  `}
+  <section>
+    <h2 class="kicker">${esc(R.interactionReport)}</h2>
+    ${interactions.length ? `
+    <table class="list">
+      <thead><tr><th>${esc(R.severity)}</th><th>${esc(P.drugPair)}</th><th>${esc(R.recommendedAction)}</th></tr></thead>
+      <tbody>${ixRows}</tbody>
+    </table>` : `
+    <div class="clear"><strong>${esc(R.noInteractions)}</strong><div class="sub">${esc(fmt(P.noInteractionsDetail, { n: pairs }))}</div></div>`}
+  </section>
 
-  <!-- Drug Advisory -->
-  ${drugFlags.some(df => df.flags.length > 0 || df.speciesNote) ? `
-  <h2>Drug Advisory Flags</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Drug</th>
-        <th>Flags</th>
-        <th>Species Note</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${drugRows}
-    </tbody>
-  </table>
-  ` : ''}
+  ${contextFindings.length ? `
+  <section>
+    <h2 class="kicker">${esc(R.contextChecks)}</h2>
+    <table class="list">
+      <thead><tr><th>${esc(R.severity)}</th><th>${esc(P.finding)}</th><th>${esc(R.suggestedFix)}</th></tr></thead>
+      <tbody>${ctxRows}</tbody>
+    </table>
+  </section>` : ''}
 
-  <!-- Footer / Acknowledgment -->
-  <div class="footer">
-    <div class="sign-box">
-      <div class="sign-label">Prescribing Veterinarian Acknowledgment</div>
-      <div class="sign-line">Signature &amp; Date</div>
-      <div style="margin-top:8px" class="sign-label">License No.</div>
-      <div class="sign-line" style="margin-top:20px">Name (print)</div>
+  <section>
+    <h2 class="kicker">${esc(P.prescription)}</h2>
+    <table class="list">
+      <thead><tr><th>#</th><th>${esc(P.drug)}</th><th>${esc(P.class)}</th><th>${esc(P.source)}</th><th>${esc(P.flags)}</th><th>${esc(P.dose)}</th></tr></thead>
+      <tbody>${rxRows}</tbody>
+    </table>
+  </section>
+
+  <footer>
+    <div class="sign">
+      <div class="kicker">${esc(P.ackTitle)}</div>
+      <div class="line"></div>
+      <div class="label">${esc(P.signature)}</div>
+      <div class="row">
+        <div><div class="line"></div><div class="label">${esc(P.printName)}</div></div>
+        <div><div class="line"></div><div class="label">${esc(P.license)}</div></div>
+      </div>
     </div>
     <div class="disclaimer">
-      This report was generated by the nuvovet Drug Utilization Review
-      System and is intended for veterinary professional use only.
-      It does not replace clinical judgment.  All prescribing decisions
-      remain the sole responsibility of the licensed veterinarian.
-      <br/><br/>
-      nuvovet DUR · vetdur.nuvovet.com · Regulatory use: MFDS trial dataset
+      ${esc(P.disclaimer)}
+      <div class="brand">nuvo<span style="color:#0b847f">DUR</span> <span class="muted" style="font-weight:400">· vetdur.nuvovet.com · ${esc(P.regulatory)}</span></div>
     </div>
-  </div>
-
+  </footer>
 </body>
 </html>`;
 }
 
-export function ScanExportButton({ results, patientInfo, drugs, species }) {
+const VARIANTS = {
+  primary: 'bg-ink-900 text-white hover:bg-ink-800',
+  secondary: 'bg-white text-ink-900 ring-1 ring-inset ring-ink-200 hover:bg-ink-50 hover:ring-ink-300',
+};
+
+export function ScanExportButton({ results, patientInfo, drugs, species, contextFindings = [], variant = 'secondary', className = '' }) {
   const { t, lang } = useI18n();
 
   const handleExport = () => {
-    const html = buildPrintHTML({ results, patientInfo, drugs, species });
-    const printWin = window.open('', '_blank', 'width=900,height=700');
+    const html = buildPrintHTML({ results, patientInfo, drugs, species, contextFindings, t, lang });
+    const printWin = window.open('', '_blank', 'width=900,height=760');
     if (!printWin) {
-      // Fallback if popup is blocked
+      // Pop-up blocked — fall back to printing the on-screen report
       window.print();
       return;
     }
     printWin.document.write(html);
     printWin.document.close();
     printWin.focus();
-    setTimeout(() => {
-      printWin.print();
-    }, 500);
+    setTimeout(() => printWin.print(), 400);
   };
 
   return (
     <button
+      type="button"
       onClick={handleExport}
-      className="flex items-center justify-center gap-1.5 px-4 py-2.5 w-full bg-slate-700 text-white text-[13px] font-medium rounded-lg hover:bg-slate-600 transition-colors"
+      className={`inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-[13.5px] font-semibold transition-colors ${VARIANTS[variant] || VARIANTS.secondary} ${className}`}
     >
-      <Download size={14} />
       {t.results.exportPDF}
     </button>
   );

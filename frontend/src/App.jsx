@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { I18nProvider } from './i18n';
-import { NuvovetMark } from './components/NuvovetLogo';
+import { ProductLockup } from './components/NuvovetLogo';
 
 // Route-level code splitting: the marketing page, the live EMR demo and the
 // clinic workspace each load only what they need.
@@ -12,10 +12,10 @@ const Patients = lazy(() => import('./pages/Patients'));
 
 function RouteFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-white" role="status" aria-label="Loading">
-      <span className="relative flex h-14 w-14 items-center justify-center rounded-[18px] bg-ink-950 text-white">
-        <span className="absolute inset-0 animate-ping rounded-[18px] bg-dur-400/25" />
-        <NuvovetMark size={26} />
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-white" role="status" aria-label="Loading">
+      <ProductLockup product="dur" size="lg" />
+      <span className="relative h-px w-28 overflow-hidden bg-ink-900/10">
+        <span className="absolute inset-y-0 left-0 w-1/3 animate-load-sweep bg-dur-500" />
       </span>
     </div>
   );

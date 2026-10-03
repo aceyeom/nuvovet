@@ -5,7 +5,7 @@
  * EMR registration fields (동물번호, 동물등록번호, 보호자, 보험 …), today's
  * visit (주호소, SOAP, TX lines), labs with species reference intervals,
  * visit history, the current prescription and one "try this" scenario
- * that triggers the case's teaching point in nuvovet DUR.
+ * that triggers the case's teaching point in nuvoDUR.
  *
  * Narrative fields are bilingual: { ko, en }.
  * Dates are generated relative to today so the chart never looks stale.
@@ -166,9 +166,9 @@ export const BREED_DATA = {
       },
     },
     {
-      id: 'sheltie',
-      breed: 'Shetland Sheepdog',
-      breedKo: '셔틀랜드 쉽독',
+      id: 'australian_shepherd',
+      breed: 'Australian Shepherd',
+      breedKo: '오스트레일리안 셰퍼드',
       demonstrates: 'MDR1 mutation + renal compromise drug safety',
       focus: { ko: 'MDR1 · 신장 · 알레르기', en: 'MDR1 · renal · allergy' },
       profile: {
@@ -176,8 +176,8 @@ export const BREED_DATA = {
         nameKo: '맥스',
         age: '4y 2m',
         sex: 'Male Neutered',
-        weight: 5.2,
-        weightTrend: [5.9, 5.7, 5.4, 5.2],
+        weight: 24.6,
+        weightTrend: [26.1, 25.6, 25.0, 24.6],
         bodyCondition: '4/9',
         temperature: '38.5 °C',
         heartRate: '102 bpm',

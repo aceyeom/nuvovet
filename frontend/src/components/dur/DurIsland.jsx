@@ -1,9 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, X, Sparkles, ArrowUpRight, ShieldCheck } from 'lucide-react';
-import { NuvovetMark } from '../NuvovetLogo';
 
 // ──────────────────────────────────────────────────────────────────
-// nuvovet DUR island
+// nuvoDUR island
 //
 // A Dynamic-Island-style overlay that floats on top of any EMR.
 // It stays a quiet pill while the regimen is safe, morphs to a glance
@@ -11,18 +9,21 @@ import { NuvovetMark } from '../NuvovetLogo';
 // one-tap fix. Size changes are measured and animated with a spring
 // curve (see .dur-island in index.css); content crossfades with blur.
 //
+// Type does the talking: severity is a coloured word, the brand is a
+// word, structure comes from rules and spacing — no badges or glyphs.
+//
 // Purely presentational — state lives in the caller (useDurMonitor for
 // the live demo, a scripted timeline for the landing hero).
 // ──────────────────────────────────────────────────────────────────
 
 const SEV = {
-  critical: { text: 'text-island-critical', dot: 'bg-island-critical', chip: 'bg-island-critical/15 text-island-critical', glow: 'rgba(255,107,94,0.22)' },
-  moderate: { text: 'text-island-moderate', dot: 'bg-island-moderate', chip: 'bg-island-moderate/15 text-island-moderate', glow: 'rgba(255,179,64,0.20)' },
-  minor: { text: 'text-island-minor', dot: 'bg-island-minor', chip: 'bg-island-minor/15 text-island-minor', glow: 'rgba(255,216,77,0.16)' },
-  unknown: { text: 'text-slate-300', dot: 'bg-slate-400', chip: 'bg-white/10 text-slate-300', glow: 'rgba(148,163,184,0.16)' },
+  critical: { text: 'text-island-critical', rgb: '255,107,94' },
+  moderate: { text: 'text-island-moderate', rgb: '255,179,64' },
+  minor: { text: 'text-island-minor', rgb: '255,216,77' },
+  unknown: { text: 'text-slate-300', rgb: '148,163,184' },
 };
 
-const WIDTH = { expanded: 436, list: 412, summary: 380 };
+const WIDTH = { expanded: 440, list: 416, summary: 384 };
 const COMPACT_H = { md: 40, sm: 36 };
 
 function useViewportWidth() {
@@ -37,84 +38,53 @@ function useViewportWidth() {
 
 // ── Small parts ──────────────────────────────────────────────────
 
-function Spinner({ className = '' }) {
+/** The product name, set small inside the island. */
+function Brand({ className = '' }) {
   return (
-    <svg viewBox="0 0 24 24" className={`h-[18px] w-[18px] animate-spin ${className}`} aria-hidden="true">
-      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="2.5" />
-      <path d="M21 12a9 9 0 0 0-9-9" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PulseDot({ color, speed = 'normal' }) {
-  return (
-    <span className="relative flex h-2.5 w-2.5 items-center justify-center">
-      <span
-        className={`absolute inline-flex h-full w-full rounded-full ${color} animate-island-pulse`}
-        style={speed === 'fast' ? { animationDuration: '1.4s' } : undefined}
-      />
-      <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${color}`} />
+    <span className={`font-semibold tracking-[-0.02em] text-white/60 ${className}`}>
+      nuvo<span className="text-island-info">DUR</span>
     </span>
   );
 }
 
-function Indicator({ tone }) {
-  if (tone === 'checking') {
-    return (
-      <span className="flex h-[22px] w-[22px] items-center justify-center text-island-info">
-        <Spinner />
-      </span>
-    );
-  }
-  if (tone === 'clear') {
-    return (
-      <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-island-clear/15 text-island-clear">
-        <Check size={13} strokeWidth={3} />
-      </span>
-    );
-  }
-  if (tone === 'reviewed') {
-    return (
-      <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-white/10 text-white/80">
-        <ShieldCheck size={13} strokeWidth={2.4} />
-      </span>
-    );
-  }
-  if (SEV[tone]) {
-    return (
-      <span className="flex h-[22px] w-[22px] items-center justify-center">
-        <PulseDot color={SEV[tone].dot} speed={tone === 'critical' ? 'fast' : 'normal'} />
-      </span>
-    );
-  }
-  // idle / monitoring — the brand mark breathing in teal
-  return (
-    <span className="relative flex h-[22px] w-[22px] items-center justify-center rounded-full bg-island-info/15 text-island-info">
-      <NuvovetMark size={12} />
-    </span>
-  );
-}
-
-function SeverityChip({ severity, label }) {
+/** Severity as a word: CRITICAL / MODERATE … in the severity colour. */
+function SevWord({ severity, children, className = '' }) {
   const s = SEV[severity] || SEV.unknown;
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-[3px] text-[10.5px] font-bold uppercase tracking-[0.06em] ${s.chip}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {label}
+    <span className={`kicker text-[10.5px] ${s.text} ${className}`}>
+      {children}
     </span>
   );
 }
 
-function IconBtn({ onClick, label, children, disabled }) {
+/** A sliding segment on a hairline track — the island is screening. */
+function Scanner() {
+  return (
+    <span className="relative ml-1 h-[2px] w-9 shrink-0 overflow-hidden rounded-full bg-white/10" aria-hidden="true">
+      <span className="absolute inset-y-0 left-0 w-1/3 animate-load-sweep rounded-full bg-island-info shadow-[0_0_8px_rgba(79,209,197,0.9)]" />
+    </span>
+  );
+}
+
+function TextBtn({ onClick, label, children, disabled, className = '' }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex h-7 w-7 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+      className={`kicker kicker-tight h-7 rounded-md px-1.5 text-[10.5px] text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white disabled:opacity-30 ${className}`}
     >
       {children}
+    </button>
+  );
+}
+
+function ReportLink({ onClick, label }) {
+  return (
+    <button type="button" onClick={onClick} className="group inline-flex items-center gap-1.5 text-[12.5px] font-medium text-white/55 transition-colors hover:text-white">
+      {label}
+      <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
     </button>
   );
 }
@@ -124,59 +94,61 @@ function IconBtn({ onClick, label, children, disabled }) {
 function CompactView({ status, size, onToggle, interactive, expandedLabel }) {
   const h = COMPACT_H[size] || COMPACT_H.md;
   const Tag = interactive ? 'button' : 'div';
+  const alert = Boolean(SEV[status.tone]);
+  const fs = size === 'sm' ? 'text-[12.5px]' : 'text-[13px]';
+  const titleTone =
+    status.tone === 'clear' ? 'text-island-clear'
+    : status.tone === 'idle' ? 'text-white/70'
+    : status.tone === 'reviewed' ? 'text-white/85'
+    : 'text-white';
   return (
     <Tag
       type={interactive ? 'button' : undefined}
       onClick={interactive ? onToggle : undefined}
       aria-expanded={interactive ? false : undefined}
       aria-label={interactive ? expandedLabel : undefined}
-      className={`relative flex items-center gap-2 whitespace-nowrap pl-[9px] pr-3.5 text-left ${interactive ? 'cursor-pointer' : ''}`}
+      className={`relative flex items-center gap-2.5 whitespace-nowrap px-4 text-left ${interactive ? 'cursor-pointer' : ''}`}
       style={{ height: h }}
     >
-      <Indicator tone={status.tone} />
-      <span className={`${size === 'sm' ? 'text-[12.5px]' : 'text-[13px]'} font-semibold tracking-[-0.01em] ${SEV[status.tone]?.text || 'text-white'}`}>
-        {status.title}
-      </span>
-      {status.detail && (
-        <span className={`${size === 'sm' ? 'text-[12.5px]' : 'text-[13px]'} max-w-[230px] truncate text-white/60`}>{status.detail}</span>
-      )}
-      {status.extra > 0 && (
-        <span className="ml-0.5 rounded-full bg-white/10 px-1.5 py-[1px] text-[11px] font-semibold text-white/80 tnum">+{status.extra}</span>
-      )}
-      {status.tone === 'checking' && (
-        <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
-          <span className="absolute inset-y-0 -left-1/2 w-1/2 animate-island-shimmer bg-gradient-to-r from-transparent via-white/[0.09] to-transparent" />
+      {alert ? <SevWord severity={status.tone}>{status.title}</SevWord> : <Brand className={fs} />}
+      <span className="h-3.5 w-px shrink-0 bg-white/15" aria-hidden="true" />
+      {alert ? (
+        <span className={`${fs} max-w-[250px] truncate font-medium text-white`}>{status.detail}</span>
+      ) : (
+        <span className={`${fs} flex min-w-0 items-center gap-1.5`}>
+          <span className={`font-semibold tracking-[-0.01em] ${titleTone}`}>{status.title}</span>
+          {status.detail && <span className="max-w-[220px] truncate text-white/50">· {status.detail}</span>}
         </span>
       )}
+      {status.extra > 0 && <span className="font-mono text-[11px] font-medium text-white/45 tnum">+{status.extra}</span>}
+      {status.tone === 'checking' && <Scanner />}
     </Tag>
   );
 }
 
 function SummaryView({ summary, labels, onCollapse, onOpenReport }) {
   return (
-    <div className="p-4" style={{ width: summary.width }}>
+    <div className="p-4 pb-3.5" style={{ width: summary.width }}>
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-island-clear/15 text-island-clear">
-          <Check size={16} strokeWidth={3} />
-        </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold tracking-[-0.01em] text-white">{summary.title}</p>
-          <p className="mt-0.5 text-[12.5px] text-white/55">{summary.detail}</p>
+          <SevWord severity="clear" className="!text-island-clear">{labels.clearWord}</SevWord>
+          <p className="mt-1.5 text-[16px] font-semibold tracking-[-0.015em] text-white">{summary.title}</p>
+          <p className="mt-0.5 text-[12.5px] text-white/50">{summary.detail}</p>
         </div>
-        <IconBtn onClick={onCollapse} label={labels.close}><X size={15} /></IconBtn>
+        {onCollapse && <TextBtn onClick={onCollapse} label={labels.close}>{labels.closeShort}</TextBtn>}
       </div>
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      <dl className="mt-3.5 border-t border-white/10">
         {summary.checks.map((c) => (
-          <span key={c} className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-1 text-[11.5px] text-white/75 ring-1 ring-inset ring-white/10">
-            <Check size={11} strokeWidth={3} className="text-island-clear" />
-            {c}
-          </span>
+          <div key={c} className="flex items-center justify-between border-b border-white/[0.07] py-[7px]">
+            <dt className="text-[12.5px] text-white/70">{c}</dt>
+            <dd className="kicker text-[10.5px] text-island-clear">{labels.pass}</dd>
+          </div>
         ))}
-      </div>
+      </dl>
       {onOpenReport && (
-        <button type="button" onClick={onOpenReport} className="mt-3.5 inline-flex items-center gap-1 text-[12.5px] font-semibold text-dur-300 hover:text-dur-200">
-          {labels.report} <ArrowUpRight size={13} />
-        </button>
+        <div className="mt-3">
+          <ReportLink onClick={onOpenReport} label={labels.report} />
+        </div>
       )}
     </div>
   );
@@ -184,48 +156,37 @@ function SummaryView({ summary, labels, onCollapse, onOpenReport }) {
 
 function ListView({ list, width, labels, onSelect, onCollapse, onOpenReport, footnote, heading }) {
   return (
-    <div className="p-2" style={{ width }}>
-      <div className="flex items-center gap-2 px-2.5 pb-1.5 pt-1">
-        <span className="text-[12px] font-medium text-white/45">nuvovet DUR</span>
-        <span className="text-[12px] font-semibold text-white/85">{heading}</span>
+    <div className="px-2 pb-2 pt-2.5" style={{ width }}>
+      <div className="flex items-center gap-2.5 px-2.5 pb-2">
+        <Brand className="text-[12.5px]" />
+        <span className="h-3 w-px bg-white/15" aria-hidden="true" />
+        <span className="text-[12.5px] font-semibold text-white/85">{heading}</span>
         <span className="ml-auto" />
-        <IconBtn onClick={onCollapse} label={labels.close}><X size={15} /></IconBtn>
+        {onCollapse && <TextBtn onClick={onCollapse} label={labels.close}>{labels.closeShort}</TextBtn>}
       </div>
-      <ul className="max-h-[300px] space-y-0.5 overflow-y-auto">
-        {list.map((row) => {
-          const s = SEV[row.severity] || SEV.unknown;
-          return (
-            <li key={row.id}>
-              <button
-                type="button"
-                onClick={() => onSelect?.(row.id)}
-                className={`flex w-full items-start gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.06] ${row.reviewed ? 'opacity-55' : ''}`}
-              >
-                <span className="mt-[5px] flex h-2.5 w-2.5 shrink-0 items-center justify-center">
-                  {row.reviewed ? <Check size={11} strokeWidth={3} className="text-white/70" /> : <span className={`h-2 w-2 rounded-full ${s.dot}`} />}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className={`text-[10.5px] font-bold uppercase tracking-[0.06em] ${row.reviewed ? 'text-white/50' : s.text}`}>
-                      {row.reviewed ? labels.reviewed : row.severityLabel}
-                    </span>
-                    <span className="truncate text-[13px] font-medium text-white">{row.title}</span>
-                  </span>
-                  <span className="mt-0.5 block truncate text-[12px] text-white/50">{row.drugsLabel}</span>
-                </span>
-                <ChevronRight size={15} className="mt-1 shrink-0 text-white/30" />
-              </button>
-            </li>
-          );
-        })}
+      <ul className="max-h-[300px] overflow-y-auto border-t border-white/10">
+        {list.map((row) => (
+          <li key={row.id} className="border-b border-white/[0.07]">
+            <button
+              type="button"
+              onClick={() => onSelect?.(row.id)}
+              className={`group grid w-full grid-cols-[88px_1fr_auto] items-baseline gap-x-2 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.05] ${row.reviewed ? 'opacity-50' : ''}`}
+            >
+              <SevWord severity={row.reviewed ? 'unknown' : row.severity} className={row.reviewed ? '!text-white/45' : ''}>
+                {row.reviewed ? labels.reviewed : row.severityLabel}
+              </SevWord>
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-medium text-white">{row.title}</span>
+                <span className="mt-0.5 block truncate text-[12px] text-white/45">{row.drugsLabel}</span>
+              </span>
+              <span aria-hidden="true" className="text-[13px] text-white/25 transition-transform group-hover:translate-x-0.5 group-hover:text-white/60">→</span>
+            </button>
+          </li>
+        ))}
       </ul>
-      <div className="mt-1 flex items-center justify-between gap-3 border-t border-white/10 px-2.5 pb-1 pt-2.5">
+      <div className="flex items-center justify-between gap-3 px-2.5 pb-1 pt-2.5">
         <span className="truncate text-[11.5px] text-white/40">{footnote}</span>
-        {onOpenReport && (
-          <button type="button" onClick={onOpenReport} className="inline-flex shrink-0 items-center gap-1 text-[12.5px] font-semibold text-dur-300 hover:text-dur-200">
-            {labels.report} <ArrowUpRight size={13} />
-          </button>
-        )}
+        {onOpenReport && <ReportLink onClick={onOpenReport} label={labels.report} />}
       </div>
     </div>
   );
@@ -235,57 +196,53 @@ function ExpandedView({ focus, width, labels, onNav, onResolve, onAck, onCollaps
   const s = SEV[focus.severity] || SEV.unknown;
   return (
     <div className="relative p-4 pb-3.5" style={{ width }}>
-      {/* severity glow */}
+      {/* severity light from the top-left corner */}
       <span
-        className="pointer-events-none absolute -left-10 -top-16 h-44 w-56 rounded-full blur-2xl"
-        style={{ background: `radial-gradient(closest-side, ${s.glow}, transparent)` }}
+        className="pointer-events-none absolute -left-12 -top-20 h-48 w-64 rounded-full blur-2xl"
+        style={{ background: `radial-gradient(closest-side, rgba(${s.rgb},0.22), transparent)` }}
       />
       <div className="relative">
-        <div className="flex items-center gap-2">
-          <SeverityChip severity={focus.severity} label={focus.severityLabel} />
-          <span className="truncate text-[11.5px] font-medium text-white/40">nuvovet DUR</span>
+        <div className="flex items-center gap-2.5">
+          <SevWord severity={focus.severity}>{focus.severityLabel}</SevWord>
+          {focus.kindLabel && (
+            <>
+              <span className="h-3 w-px bg-white/15" aria-hidden="true" />
+              <span className="truncate text-[11.5px] font-medium text-white/45">{focus.kindLabel}</span>
+            </>
+          )}
           <div className="ml-auto flex items-center">
             {focus.total > 1 && (
               <>
-                <IconBtn onClick={() => onNav?.(-1)} label={labels.prev}><ChevronLeft size={15} /></IconBtn>
-                <span className="px-0.5 text-[11.5px] font-medium text-white/50 tnum">{focus.index + 1}/{focus.total}</span>
-                <IconBtn onClick={() => onNav?.(1)} label={labels.next}><ChevronRight size={15} /></IconBtn>
+                <TextBtn onClick={() => onNav?.(-1)} label={labels.prev} disabled={!onNav}>←</TextBtn>
+                <span className="px-1 font-mono text-[11px] text-white/45 tnum">{focus.index + 1}/{focus.total}</span>
+                <TextBtn onClick={() => onNav?.(1)} label={labels.next} disabled={!onNav}>→</TextBtn>
               </>
             )}
-            <IconBtn onClick={onCollapse} label={labels.close}><X size={15} /></IconBtn>
+            {onCollapse && <TextBtn onClick={onCollapse} label={labels.close} className="ml-1">{labels.closeShort}</TextBtn>}
           </div>
         </div>
 
-        <h3 className="mt-2.5 text-[16.5px] font-semibold leading-snug tracking-[-0.015em] text-white">{focus.title}</h3>
-
+        <h3 className="mt-3 text-[17px] font-semibold leading-snug tracking-[-0.02em] text-white">{focus.title}</h3>
         {focus.drugs.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {focus.drugs.map((d, i) => (
-              <React.Fragment key={`${d}-${i}`}>
-                {i > 0 && <span className="text-[12px] text-white/30">{focus.kind === 'interaction' ? '⇄' : '·'}</span>}
-                <span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[12.5px] font-medium text-white/90 ring-1 ring-inset ring-white/10">{d}</span>
-              </React.Fragment>
-            ))}
-          </div>
+          <p className="mt-1 font-mono text-[12px] text-white/55">
+            {focus.drugs.join(focus.kind === 'interaction' ? '  ×  ' : '  ·  ')}
+          </p>
         )}
 
-        {focus.summary && <p className="mt-2.5 text-[13px] leading-[1.55] text-white/65">{focus.summary}</p>}
+        {focus.summary && <p className="mt-2.5 text-[13px] leading-[1.6] text-white/65">{focus.summary}</p>}
 
         {focus.suggestion && (
-          <div className="mt-3 flex gap-2.5 rounded-xl bg-white/[0.055] px-3 py-2.5 ring-1 ring-inset ring-white/10">
-            <Sparkles size={14} className="mt-[3px] shrink-0 text-island-info" />
-            <div className="min-w-0">
-              <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-island-info/90">{focus.hasResolution ? labels.suggested : labels.recommended}</p>
-              <p className="mt-0.5 text-[13px] leading-snug text-white">{focus.suggestion}</p>
-            </div>
+          <div className="mt-3.5 border-l-2 border-island-info/70 pl-3">
+            <p className="kicker text-[10px] text-island-info">
+              {focus.hasResolution ? labels.suggested : labels.recommended}
+            </p>
+            <p className="mt-1 text-[13px] leading-snug text-white">{focus.suggestion}</p>
           </div>
         )}
 
-        <div className="mt-3.5 flex items-center gap-2">
+        <div className="mt-4 flex items-center gap-2">
           {focus.reviewed ? (
-            <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/10 px-3 text-[12.5px] font-semibold text-white/80">
-              <Check size={13} strokeWidth={3} /> {labels.reviewed}
-            </span>
+            <span className="kicker text-[11px] text-white/55">{labels.reviewed}</span>
           ) : (
             <>
               {focus.hasResolution && onResolve && (
@@ -293,7 +250,7 @@ function ExpandedView({ focus, width, labels, onNav, onResolve, onAck, onCollaps
                   type="button"
                   data-island-action="resolve"
                   onClick={() => onResolve(focus.id)}
-                  className={`inline-flex h-8 items-center rounded-full bg-white px-3.5 text-[12.5px] font-semibold text-ink-900 transition-transform hover:scale-[1.03] active:scale-[0.97] ${highlightAction === 'resolve' ? 'ring-4 ring-white/25' : ''}`}
+                  className={`inline-flex h-8 items-center rounded-full bg-white px-4 text-[12.5px] font-semibold text-ink-900 transition-transform hover:scale-[1.03] active:scale-[0.97] ${highlightAction === 'resolve' ? 'scale-[0.97] ring-4 ring-white/25' : ''}`}
                 >
                   {focus.verb}
                 </button>
@@ -303,7 +260,7 @@ function ExpandedView({ focus, width, labels, onNav, onResolve, onAck, onCollaps
                   type="button"
                   data-island-action="ack"
                   onClick={() => onAck(focus.id)}
-                  className={`inline-flex h-8 items-center rounded-full px-3.5 text-[12.5px] font-semibold transition-colors ${focus.hasResolution ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-white text-ink-900 hover:bg-white/90'}`}
+                  className={`inline-flex h-8 items-center rounded-full px-3.5 text-[12.5px] font-semibold transition-colors ${focus.hasResolution ? 'text-white/75 ring-1 ring-inset ring-white/15 hover:bg-white/[0.07] hover:text-white' : 'bg-white text-ink-900 hover:bg-white/90'}`}
                 >
                   {labels.acknowledge}
                 </button>
@@ -311,13 +268,13 @@ function ExpandedView({ focus, width, labels, onNav, onResolve, onAck, onCollaps
             </>
           )}
           {onOpenReport && (
-            <button type="button" onClick={onOpenReport} className="ml-auto inline-flex items-center gap-1 text-[12.5px] font-medium text-white/55 hover:text-white">
-              {labels.report} <ArrowUpRight size={13} />
-            </button>
+            <span className="ml-auto">
+              <ReportLink onClick={onOpenReport} label={labels.report} />
+            </span>
           )}
         </div>
 
-        {focus.citation && <p className="mt-3 truncate font-mono text-[10.5px] text-white/30">{focus.citation}</p>}
+        {focus.citation && <p className="mt-3.5 truncate border-t border-white/[0.08] pt-2.5 font-mono text-[10.5px] text-white/30">{focus.citation}</p>}
       </div>
     </div>
   );
@@ -328,7 +285,7 @@ function ExpandedView({ focus, width, labels, onNav, onResolve, onAck, onCollaps
 /**
  * @param {'compact'|'summary'|'list'|'expanded'} view
  * @param {object}  status    compact pill model { tone, title, detail, extra }
- * @param {object}  focus     expanded card model (see describeFinding + severityLabel/index/total/reviewed)
+ * @param {object}  focus     expanded card model (describeFinding + severityLabel/kindLabel/index/total/reviewed)
  * @param {Array}   list      rows for the list view
  * @param {object}  summary   clear-state card model { title, detail, checks[] }
  * @param {object}  labels    t.island.ui
@@ -463,43 +420,59 @@ export function DurIsland({
 
   const open = effectiveView !== 'compact';
   const radius = open ? 26 : box.h / 2;
+  const alertTone = effectiveView === 'compact' ? status?.tone : effectiveView === 'expanded' ? focus?.severity : null;
+  const ring = SEV[alertTone]?.rgb;
 
   return (
-    <div
-      ref={rootRef}
-      className={`dur-island relative overflow-hidden bg-island-bg text-white shadow-island ${className}`}
-      style={{ width: box.w, height: box.h, borderRadius: radius, ...style }}
-      onMouseEnter={() => onHoverChange?.(true)}
-      onMouseLeave={() => onHoverChange?.(false)}
-      onFocus={() => { focusInside.current = true; onHoverChange?.(true); }}
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget)) {
-          focusInside.current = false;
-          onHoverChange?.(false);
-        }
-      }}
-      role="region"
-      aria-label="nuvovet DUR"
-    >
-      {/* top sheen */}
-      <span className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
-      {exiting && exiting.key !== contentKey && (
-        <div
-          key={`x:${exiting.key}`}
-          aria-hidden="true"
-          className="dur-island-content-exit pointer-events-none absolute left-0 top-0"
-          style={{ width: exiting.snap.width ?? 'max-content', maxWidth: limit }}
-        >
-          {renderView(exiting.snap, false)}
-        </div>
-      )}
+    <div className={`relative ${className}`} style={style} data-tone={alertTone || status?.tone || 'idle'}>
+      {/* severity halo — outside the clipped surface */}
+      <span
+        aria-hidden="true"
+        className={`dur-island pointer-events-none absolute left-0 top-0 ${ring && alertTone === 'critical' ? 'animate-halo' : ''}`}
+        style={{
+          width: box.w,
+          height: box.h,
+          borderRadius: radius,
+          boxShadow: ring ? `0 0 0 1px rgba(${ring},0.55), 0 0 28px -4px rgba(${ring},0.55)` : '0 0 0 1px rgba(255,255,255,0)',
+          opacity: ring ? 1 : 0,
+        }}
+      />
       <div
-        ref={contentRef}
-        key={contentKey}
-        className="dur-island-content-enter absolute left-0 top-0"
-        style={{ width: width ?? 'max-content', maxWidth: limit }}
+        ref={rootRef}
+        className="dur-island relative overflow-hidden bg-island-bg text-white shadow-island"
+        style={{ width: box.w, height: box.h, borderRadius: radius }}
+        onMouseEnter={() => onHoverChange?.(true)}
+        onMouseLeave={() => onHoverChange?.(false)}
+        onFocus={() => { focusInside.current = true; onHoverChange?.(true); }}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) {
+            focusInside.current = false;
+            onHoverChange?.(false);
+          }
+        }}
+        role="region"
+        aria-label="nuvoDUR"
       >
-        {renderView(snapshot, true)}
+        {/* top sheen */}
+        <span className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+        {exiting && exiting.key !== contentKey && (
+          <div
+            key={`x:${exiting.key}`}
+            aria-hidden="true"
+            className="dur-island-content-exit pointer-events-none absolute left-0 top-0"
+            style={{ width: exiting.snap.width ?? 'max-content', maxWidth: limit }}
+          >
+            {renderView(exiting.snap, false)}
+          </div>
+        )}
+        <div
+          ref={contentRef}
+          key={contentKey}
+          className="dur-island-content-enter absolute left-0 top-0"
+          style={{ width: width ?? 'max-content', maxWidth: limit }}
+        >
+          {renderView(snapshot, true)}
+        </div>
       </div>
     </div>
   );

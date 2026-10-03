@@ -1,39 +1,75 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Lock, Menu, X, PlayCircle, Send } from 'lucide-react';
-import { NuvovetBrand, ProductGlyph, ProductLockup } from '../NuvovetLogo';
+import { NuvovetWordmark, ProductName, ProductLockup, BrandText } from '../NuvovetLogo';
 import { useI18n, LangToggle } from '../../i18n';
 
 // ──────────────────────────────────────────────────────────────────
 // Site navigation + footer.
-// Every destination carries a one-line explanation so visitors always
-// know what they are about to open: the live demo (no login), the clinic
-// workspace (needs an access code) or the access request form.
+//
+// The bar sits on the dark hero stage: transparent at the very top, a
+// dark glass bar once the page scrolls — so it reads the same over the
+// dark and the light sections. Every destination explains itself in the
+// mobile menu: the live demo (no login), the clinic workspace (needs an
+// access code) and the access request form.
 // ──────────────────────────────────────────────────────────────────
 
-function ProductLink({ product, href, label, badge }) {
+const cx = (...parts) => parts.filter(Boolean).join(' ');
+const WRAP = 'mx-auto w-full max-w-7xl px-5 sm:px-8';
+const LINK = 'inline-flex h-10 items-center rounded-full px-3 text-[13.5px] font-medium text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white';
+
+/** Scroll to an in-page anchor after the menu has released the page. */
+function goToHash(hash) {
+  const el = document.getElementById(hash.slice(1));
+  if (!el) return;
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  try { window.history.replaceState(window.history.state, '', hash); } catch { /* ignore */ }
+}
+
+/** Two hairlines that cross into an X — no icon font, no SVG sprite. */
+function MenuGlyph({ open }) {
   return (
-    <a
-      href={href}
-      className="group inline-flex items-center gap-2 rounded-full px-3 py-2 text-[13.5px] font-medium text-ink-600 transition-colors hover:bg-ink-100/70 hover:text-ink-900"
-    >
-      <ProductGlyph product={product} size={18} />
-      <span>
-        nuvovet <span className={product === 'dur' ? 'font-semibold text-dur-600' : 'font-semibold text-claims-600'}>{label}</span>
-      </span>
-      {badge && (
-        <span className={`rounded-full px-1.5 py-[1px] text-[10px] font-bold uppercase tracking-wide ${product === 'dur' ? 'bg-dur-50 text-dur-700' : 'bg-claims-50 text-claims-700'}`}>
-          {badge}
-        </span>
-      )}
-    </a>
+    <span aria-hidden="true" className="relative block h-3 w-4">
+      <span className={cx('absolute left-0 top-1/2 h-px w-4 bg-current transition-transform duration-300 ease-out-expo', open ? 'rotate-45' : '-translate-y-[3px]')} />
+      <span className={cx('absolute left-0 top-1/2 h-px w-4 bg-current transition-transform duration-300 ease-out-expo', open ? '-rotate-45' : 'translate-y-[3px]')} />
+    </span>
   );
+}
+
+function MenuRow({ title, desc, meta, metaClass, href, to, onClick, onNavigate }) {
+  const cls = 'group flex min-h-[64px] w-full items-center gap-4 border-b border-white/[0.1] py-4 text-left';
+  const body = (
+    <>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline justify-between gap-3">
+          <span className="text-[17px] font-semibold tracking-[-0.015em] text-white">{title}</span>
+          {meta && <span className={cx('kicker shrink-0 text-[10px]', metaClass)}>{meta}</span>}
+        </span>
+        <span className="mt-1 block text-pretty text-[13.5px] leading-snug text-white/50">{desc}</span>
+      </span>
+      <span aria-hidden="true" className="shrink-0 text-[15px] text-white/35 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:text-white">→</span>
+    </>
+  );
+  if (href) {
+    return (
+      <a href={href} className={cls} onClick={(e) => { e.preventDefault(); onNavigate?.(href); }}>
+        {body}
+      </a>
+    );
+  }
+  if (to) return <Link to={to} className={cls} onClick={() => onNavigate?.()}>{body}</Link>;
+  return <button type="button" className={cls} onClick={onClick}>{body}</button>;
 }
 
 export function SiteNav({ onRequestAccess }) {
   const { t } = useI18n();
+  const N = t.nav;
+  const L = t.landing;
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const headerRef = useRef(null);
+  const toggleRef = useRef(null);
+  const pendingHash = useRef(null);
 
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 8);
@@ -42,154 +78,234 @@ export function SiteNav({ onRequestAccess }) {
     return () => window.removeEventListener('scroll', on);
   }, []);
 
+  // Open menu: lock the page, trap focus, Escape closes, desktop width closes
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    const { body } = document;
+    const prevOverflow = body.style.overflow;
+    body.style.overflow = 'hidden';
+
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onMq = () => { if (mq.matches) setOpen(false); };
+    mq.addEventListener?.('change', onMq);
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        toggleRef.current?.focus();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const nodes = [...(headerRef.current?.querySelectorAll('a[href], button:not([disabled])') || [])]
+        .filter((n) => n.getClientRects().length > 0);
+      if (!nodes.length) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const raf = requestAnimationFrame(() => headerRef.current?.querySelector('#site-menu a, #site-menu button')?.focus({ preventScroll: true }));
+
+    return () => {
+      cancelAnimationFrame(raf);
+      body.style.overflow = prevOverflow;
+      mq.removeEventListener?.('change', onMq);
+      window.removeEventListener('keydown', onKey);
+      // follow an in-page link once the page can scroll again
+      if (pendingHash.current) {
+        const hash = pendingHash.current;
+        pendingHash.current = null;
+        requestAnimationFrame(() => goToHash(hash));
+      }
+    };
   }, [open]);
 
-  const close = () => setOpen(false);
+  const close = useCallback(() => setOpen(false), []);
+  const navigateTo = useCallback((hash) => {
+    if (hash) pendingHash.current = hash;
+    setOpen(false);
+  }, []);
+
+  const solid = scrolled || open;
 
   return (
     <header
-      className={`sticky top-0 z-50 transition-[background-color,box-shadow,border-color] duration-300 ${
-        scrolled || open ? 'border-b border-ink-200/70 bg-white/80 backdrop-blur-xl' : 'border-b border-transparent bg-transparent'
-      }`}
+      ref={headerRef}
+      className={cx(
+        'sticky top-0 z-50 text-white transition-[background-color,border-color] duration-300',
+        solid
+          ? 'border-b border-white/[0.08] bg-[#05070D]/[0.82] backdrop-blur-xl backdrop-saturate-150'
+          : 'border-b border-transparent bg-transparent',
+      )}
     >
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
-        <Link to="/" aria-label="nuvovet home" className="shrink-0" onClick={close}>
-          <NuvovetBrand size={26} />
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-[60] focus:rounded-full focus:bg-white focus:px-4 focus:py-2 focus:text-[13px] focus:font-semibold focus:text-ink-900"
+      >
+        {N.skip}
+      </a>
+
+      <div className={cx(WRAP, 'flex h-16 items-center gap-6')}>
+        <Link to="/" aria-label={N.home} onClick={close} className="-mx-2 flex h-10 shrink-0 items-center rounded-md px-2">
+          <NuvovetWordmark height={17} className="text-white" title="nuvovet" />
         </Link>
 
-        <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Primary">
-          <ProductLink product="dur" href="#dur" label="DUR" badge={t.nav.live} />
-          <ProductLink product="claims" href="#claims" label="Claims" badge={t.nav.soon} />
-          <span className="mx-2 h-5 w-px bg-ink-200" />
-          <a href="#how" className="rounded-full px-3 py-2 text-[13.5px] font-medium text-ink-600 transition-colors hover:bg-ink-100/70 hover:text-ink-900">
-            {t.nav.how}
+        <nav aria-label={N.primary} className="hidden items-center lg:flex">
+          <a href="#dur" className={cx(LINK, 'font-semibold text-white/90')}>
+            <ProductName product="dur" tone="dark" />
           </a>
-          <Link to="/demo" className="rounded-full px-3 py-2 text-[13.5px] font-medium text-ink-600 transition-colors hover:bg-ink-100/70 hover:text-ink-900">
-            {t.nav.demo}
-          </Link>
+          <a href="#claims" className={cx(LINK, 'gap-2 font-semibold text-white/90')}>
+            <ProductName product="claims" tone="dark" />
+            <span className="kicker text-[9.5px] font-medium text-white/35">{N.soon}</span>
+          </a>
+          <span aria-hidden="true" className="mx-2.5 h-4 w-px bg-white/15" />
+          <a href="#how" className={LINK}>{N.how}</a>
+          <Link to="/demo" className={LINK}>{N.demo}</Link>
         </nav>
 
-        <div className="flex items-center gap-2">
-          <LangToggle className="hidden sm:inline-flex" />
-          <Link
-            to="/system"
-            title={t.nav.signInDesc}
-            className="hidden items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-medium text-ink-600 transition-colors hover:bg-ink-100/70 hover:text-ink-900 md:inline-flex"
-          >
-            <Lock size={13} /> {t.nav.signIn}
-          </Link>
-          <Link
-            to="/demo"
-            className="hidden h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-ink-800 sm:inline-flex"
-          >
-            {t.nav.tryDemo} <ArrowRight size={14} />
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <LangToggle tone="dark" className="hidden sm:inline-flex" />
+          <Link to="/system" title={N.signInDesc} className={cx(LINK, 'hidden md:inline-flex')}>
+            {N.signIn}
           </Link>
           <button
             type="button"
+            onClick={onRequestAccess}
+            className="hidden h-10 items-center rounded-full bg-white px-4 text-[13px] font-semibold text-ink-900 transition-colors hover:bg-white/90 sm:inline-flex"
+          >
+            {N.requestAccess}
+          </button>
+          <button
+            ref={toggleRef}
+            type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
-            aria-controls="mobile-menu"
-            aria-label={open ? t.nav.close : t.nav.menu}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-ink-700 hover:bg-ink-100 lg:hidden"
+            aria-controls="site-menu"
+            aria-label={open ? N.close : N.menu}
+            className="-mr-2 flex h-10 items-center gap-2.5 rounded-full px-3 text-white/85 transition-colors hover:bg-white/[0.06] hover:text-white lg:hidden"
           >
-            {open ? <X size={20} /> : <Menu size={20} />}
+            <span className="kicker text-[11px]">{open ? N.closeShort : N.menu}</span>
+            <MenuGlyph open={open} />
           </button>
         </div>
       </div>
 
-      {/* Mobile / tablet menu — every item explains where it goes */}
       {open && (
-        <div id="mobile-menu" className="animate-sheet-up border-t border-ink-200/70 bg-white lg:hidden">
-          <div className="mx-auto max-w-7xl space-y-5 px-5 py-5 sm:px-8">
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-400">{t.nav.products}</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {[
-                  { product: 'dur', href: '#dur', desc: t.nav.durDesc, badge: t.nav.live },
-                  { product: 'claims', href: '#claims', desc: t.nav.claimsDesc, badge: t.nav.soon },
-                ].map((p) => (
-                  <a key={p.product} href={p.href} onClick={close} className="flex items-start gap-3 rounded-2xl p-3 ring-1 ring-ink-200/80 transition-colors hover:bg-ink-50">
-                    <ProductGlyph product={p.product} size={30} />
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-2">
-                        <ProductLockup product={p.product} size="sm" showMark={false} />
-                        <span className={`rounded-full px-1.5 py-[1px] text-[10px] font-bold uppercase ${p.product === 'dur' ? 'bg-dur-50 text-dur-700' : 'bg-claims-50 text-claims-700'}`}>{p.badge}</span>
-                      </span>
-                      <span className="mt-1 block text-[12.5px] leading-snug text-ink-500">{p.desc}</span>
-                    </span>
-                  </a>
-                ))}
-              </div>
+        <div id="site-menu" className="fixed inset-x-0 bottom-0 top-16 z-40 animate-fade-in overflow-y-auto overscroll-contain bg-[#05070D] lg:hidden">
+          <nav aria-label={N.primary} className={cx(WRAP, 'pb-12')}>
+            <p className="kicker pb-3 pt-7 text-[10.5px] text-white/35">{N.products}</p>
+            <ul className="border-t border-white/[0.1]">
+              <li>
+                <MenuRow
+                  href="#dur"
+                  onNavigate={navigateTo}
+                  title={<ProductLockup product="dur" size="md" tone="dark" className="!text-[18px]" />}
+                  meta={L.durStatus}
+                  metaClass="text-dur-300"
+                  desc={N.durDesc}
+                />
+              </li>
+              <li>
+                <MenuRow
+                  href="#claims"
+                  onNavigate={navigateTo}
+                  title={<ProductLockup product="claims" size="md" tone="dark" className="!text-[18px]" />}
+                  meta={L.claimsStatus}
+                  metaClass="text-claims-300"
+                  desc={N.claimsDesc}
+                />
+              </li>
+              <li>
+                <MenuRow href="#how" onNavigate={navigateTo} title={N.how} desc={N.howDesc} />
+              </li>
+            </ul>
+
+            <p className="kicker pb-3 pt-9 text-[10.5px] text-white/35">{N.start}</p>
+            <ul className="border-t border-white/[0.1]">
+              <li>
+                <MenuRow to="/demo" onNavigate={close} title={N.demo} desc={<BrandText tone="dark">{N.demoDesc}</BrandText>} />
+              </li>
+              <li>
+                <MenuRow to="/system" onNavigate={close} title={N.signIn} desc={N.signInDesc} />
+              </li>
+              <li>
+                <MenuRow onClick={() => { close(); onRequestAccess?.(); }} title={N.requestAccess} desc={N.accessDesc} />
+              </li>
+            </ul>
+
+            <div className="mt-9 flex items-center justify-between gap-4">
+              <span className="kicker text-[10.5px] text-white/35">{N.language}</span>
+              <LangToggle tone="dark" />
             </div>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <Link to="/demo" onClick={close} className="flex items-start gap-3 rounded-2xl bg-ink-900 p-3 text-white">
-                <PlayCircle size={20} className="mt-0.5 shrink-0 text-dur-300" />
-                <span>
-                  <span className="block text-[14px] font-semibold">{t.nav.demo}</span>
-                  <span className="mt-0.5 block text-[12px] leading-snug text-white/60">{t.nav.demoDesc}</span>
-                </span>
-              </Link>
-              <Link to="/system" onClick={close} className="flex items-start gap-3 rounded-2xl p-3 ring-1 ring-ink-200/80 hover:bg-ink-50">
-                <Lock size={18} className="mt-0.5 shrink-0 text-ink-500" />
-                <span>
-                  <span className="block text-[14px] font-semibold text-ink-900">{t.nav.signIn}</span>
-                  <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">{t.nav.signInDesc}</span>
-                </span>
-              </Link>
-              <button type="button" onClick={() => { close(); onRequestAccess?.(); }} className="flex items-start gap-3 rounded-2xl p-3 text-left ring-1 ring-ink-200/80 hover:bg-ink-50">
-                <Send size={18} className="mt-0.5 shrink-0 text-ink-500" />
-                <span>
-                  <span className="block text-[14px] font-semibold text-ink-900">{t.nav.requestAccess}</span>
-                  <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">{t.nav.accessDesc}</span>
-                </span>
-              </button>
-            </div>
-            <div className="flex items-center justify-between border-t border-ink-100 pt-4">
-              <a href="#how" onClick={close} className="text-[13.5px] font-medium text-ink-600">{t.nav.how}</a>
-              <LangToggle />
-            </div>
-          </div>
+          </nav>
         </div>
       )}
     </header>
   );
 }
 
+// ── Footer ───────────────────────────────────────────────────────
+
+const FOOT_LINK = 'inline-flex min-h-[40px] items-center text-[14px] text-white/65 transition-colors hover:text-white';
+
 export function SiteFooter({ onRequestAccess }) {
   const { t } = useI18n();
+  const N = t.nav;
+  const L = t.landing;
   return (
-    <footer className="border-t border-ink-200/70 bg-white">
-      <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 sm:px-8 md:grid-cols-[1.4fr_1fr_1fr]">
-        <div>
-          <NuvovetBrand size={28} />
-          <p className="mt-4 max-w-sm text-[13px] leading-relaxed text-ink-500">{t.landing.footerDisclaimer}</p>
+    <footer className="relative overflow-hidden bg-[#05070D] text-white">
+      <div className={WRAP}>
+        <div className="grid grid-cols-1 gap-12 border-t border-white/[0.1] pb-12 pt-14 sm:grid-cols-2 lg:grid-cols-12 lg:gap-8 lg:pb-16">
+          <div className="sm:col-span-2 lg:col-span-5">
+            <Link to="/" aria-label={N.home} className="-mx-1 inline-flex h-10 items-center rounded-md px-1">
+              <NuvovetWordmark height={20} className="text-white" title="nuvovet" />
+            </Link>
+            <p className="mt-4 max-w-sm text-pretty text-[13.5px] leading-relaxed text-white/45">{L.footerDisclaimer}</p>
+          </div>
+
+          <nav aria-label={L.footerProducts} className="lg:col-span-3">
+            <p className="kicker text-[10.5px] text-white/35">{L.footerProducts}</p>
+            <ul className="mt-3">
+              <li>
+                <a href="#dur" className="group flex min-h-[48px] flex-col justify-center py-1.5">
+                  <ProductLockup product="dur" size="sm" tone="dark" className="transition-opacity group-hover:opacity-80" />
+                  <span className="kicker mt-1.5 text-[10px] text-dur-300">{L.durStatus}</span>
+                </a>
+              </li>
+              <li>
+                <a href="#claims" className="group flex min-h-[48px] flex-col justify-center py-1.5">
+                  <ProductLockup product="claims" size="sm" tone="dark" className="transition-opacity group-hover:opacity-80" />
+                  <span className="kicker mt-1.5 text-[10px] text-claims-300">{L.claimsStatus}</span>
+                </a>
+              </li>
+            </ul>
+          </nav>
+
+          <nav aria-label={L.footerStart} className="lg:col-span-2">
+            <p className="kicker text-[10.5px] text-white/35">{L.footerStart}</p>
+            <ul className="mt-3">
+              <li><Link to="/demo" className={FOOT_LINK}>{N.demo}</Link></li>
+              <li><Link to="/system" className={FOOT_LINK}>{N.signIn}</Link></li>
+              <li><button type="button" onClick={onRequestAccess} className={FOOT_LINK}>{N.requestAccess}</button></li>
+            </ul>
+          </nav>
+
+          <div className="lg:col-span-2">
+            <p className="kicker text-[10.5px] text-white/35">{L.footerLanguage}</p>
+            <LangToggle tone="dark" className="mt-5" />
+          </div>
         </div>
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-400">{t.landing.footerProducts}</p>
-          <ul className="mt-3 space-y-2.5">
-            <li><a href="#dur" className="inline-flex items-center gap-2 text-[13.5px] hover:opacity-80"><ProductGlyph product="dur" size={18} /><ProductLockup product="dur" size="sm" showMark={false} /></a></li>
-            <li><a href="#claims" className="inline-flex items-center gap-2 text-[13.5px] hover:opacity-80"><ProductGlyph product="claims" size={18} /><ProductLockup product="claims" size="sm" showMark={false} /><span className="rounded-full bg-claims-50 px-1.5 py-[1px] text-[10px] font-bold uppercase text-claims-700">{t.nav.soon}</span></a></li>
-          </ul>
-        </div>
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-400">{t.landing.footerStart}</p>
-          <ul className="mt-3 space-y-2.5 text-[13.5px] text-ink-600">
-            <li><Link to="/demo" className="hover:text-ink-900">{t.nav.demo}</Link></li>
-            <li><Link to="/system" className="hover:text-ink-900">{t.nav.signIn}</Link></li>
-            <li><button type="button" onClick={onRequestAccess} className="hover:text-ink-900">{t.nav.requestAccess}</button></li>
-          </ul>
-        </div>
-      </div>
-      <div className="border-t border-ink-100">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-5 py-5 text-[12px] text-ink-400 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <span>© {new Date().getFullYear()} {t.landing.footerRights}</span>
+
+        <div className="flex flex-col gap-1.5 border-t border-white/[0.1] py-6 text-[12.5px] text-white/40 sm:flex-row sm:items-center sm:justify-between">
+          <span>© {new Date().getFullYear()} {L.footerRights}</span>
           <span>{t.appTagline}</span>
         </div>
+      </div>
+
+      {/* The wordmark, set as large as the page allows */}
+      <div aria-hidden="true" className={cx(WRAP, 'pointer-events-none -mb-[1.5%] select-none')}>
+        <NuvovetWordmark height={120} className="h-auto w-full text-white/[0.045]" title="" />
       </div>
     </footer>
   );

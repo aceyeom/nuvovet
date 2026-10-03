@@ -1,14 +1,16 @@
 import React from 'react';
-import { Activity, AlertTriangle } from 'lucide-react';
 import { useI18n } from '../i18n';
 
 /**
- * Cumulative Organ Load Score
+ * Cumulative Organ Load
  *
- * Always expanded — all five organ scores visible without any interaction required.
- * This is one of NuvoVet's core differentiators and must be prominently displayed.
+ * Always expanded — renal and hepatic burden plus the per-drug
+ * contribution table are visible without any interaction. This is one
+ * of nuvoDUR's core differentiators, so it is set as data, not hidden
+ * behind a toggle.
  *
- * Removed: accordion/collapse toggle (Task 5)
+ * getOrganLoads / getRenalRisk are shared with the DUR island
+ * (components/dur/findings.js) so the island and the report agree.
  */
 
 export function getOrganLoads(drugs, species) {
@@ -66,35 +68,33 @@ export function getRenalRisk(renalPct, elevatedCreatinine) {
   if (elevatedCreatinine && renalPct >= 40)
     return { level: 'critical', label: 'Critical', bar: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50 border-red-200' };
   if (renalPct >= 120)
-    return { level: 'high', label: 'High', bar: 'bg-red-400', text: 'text-red-600', bg: 'bg-red-50 border-red-200' };
+    return { level: 'high', label: 'High', bar: 'bg-red-400', text: 'text-red-700', bg: 'bg-red-50 border-red-200' };
   if (renalPct >= 70)
-    return { level: 'moderate', label: 'Moderate', bar: 'bg-amber-400', text: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' };
+    return { level: 'moderate', label: 'Moderate', bar: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' };
   return { level: 'low', label: 'Low', bar: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-white border-slate-200' };
 }
 
 function getHepaticRisk(hepaticPct) {
-  if (hepaticPct >= 180)
-    return { level: 'high', label: 'High', bar: 'bg-amber-500', text: 'text-amber-700' };
-  if (hepaticPct >= 100)
-    return { level: 'moderate', label: 'Moderate', bar: 'bg-yellow-400', text: 'text-amber-600' };
+  if (hepaticPct >= 180) return { level: 'high', label: 'High', bar: 'bg-amber-500', text: 'text-amber-700' };
+  if (hepaticPct >= 100) return { level: 'moderate', label: 'Moderate', bar: 'bg-yellow-400', text: 'text-yellow-700' };
   return { level: 'low', label: 'Low', bar: 'bg-emerald-500', text: 'text-emerald-700' };
 }
 
-function OrganBar({ label, pct, barColor, textColor, labelRight }) {
-  const visualWidth = Math.min((pct / 200) * 100, 100);
+// Track spans 0–200 %; the hairline tick marks 100 % of a single pathway.
+function OrganMeter({ label, pct, risk, riskWord }) {
+  const width = Math.min((pct / 200) * 100, 100);
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-[11px] font-medium text-slate-600">{label}</span>
-        <span className={`text-[11px] font-semibold font-mono ${textColor}`}>
-          {pct}%{labelRight && <span className="font-normal text-slate-400 ml-1">({labelRight})</span>}
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[13px] font-medium text-ink-700">{label}</span>
+        <span className="flex items-baseline gap-2 whitespace-nowrap">
+          <span className="font-mono text-[15px] font-semibold text-ink-900 tnum">{pct}%</span>
+          <span className={`kicker min-w-[52px] text-right text-[10px] ${risk.text}`}>{riskWord}</span>
         </span>
       </div>
-      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${barColor}`}
-          style={{ width: `${visualWidth}%` }}
-        />
+      <div className="relative mt-2 h-[2px] bg-ink-100" role="img" aria-label={`${label}: ${pct}% — ${riskWord}`}>
+        <span className={`absolute inset-y-0 left-0 ${risk.bar} transition-[width] duration-700 ease-out`} style={{ width: `${width}%` }} />
+        <span aria-hidden="true" className="absolute -top-[3px] left-1/2 h-[8px] w-px bg-ink-300" />
       </div>
     </div>
   );
@@ -102,6 +102,7 @@ function OrganBar({ label, pct, barColor, textColor, labelRight }) {
 
 export function OrganLoadIndicator({ drugs = [], patientInfo, species = 'dog' }) {
   const { t } = useI18n();
+  const R = t.results;
 
   if (drugs.length === 0) return null;
 
@@ -116,96 +117,58 @@ export function OrganLoadIndicator({ drugs = [], patientInfo, species = 'dog' })
   const renalRisk = getRenalRisk(renal, elevatedCreatinine);
   const hepaticRisk = getHepaticRisk(hepatic);
   const isCritical = renalRisk.level === 'critical';
+  const anyUnscaled = contributions.some((c) => !c.doseScalingApplied);
 
   return (
-    <div className={`rounded-xl border overflow-hidden shadow-sm ${renalRisk.bg}`}>
-      {/* Header — no toggle, always visible */}
-      <div className="px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Activity size={14} className={renalRisk.text} />
-          <span className="text-[12px] font-semibold text-slate-700 uppercase tracking-wider">
-            {t.results.cumulativeOrganLoad}
-          </span>
-          {isCritical && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
-              <AlertTriangle size={9} />
-              {t.results.compromisedKidney}
-            </span>
-          )}
-        </div>
-        <span className={`text-[12px] font-mono font-semibold ${renalRisk.text}`}>
-          {renal}% {t.results.renalShort}
-        </span>
+    <section aria-label={R.cumulativeOrganLoad}>
+      <h3 className="kicker text-[11px] text-ink-500">{R.cumulativeOrganLoad}</h3>
+
+      <div className="mt-4 space-y-4">
+        <OrganMeter label={R.renalEliminationBurden} pct={renal} risk={renalRisk} riskWord={R.riskLevel[renalRisk.level] || renalRisk.label} />
+        <OrganMeter label={R.hepaticEliminationBurden} pct={hepatic} risk={hepaticRisk} riskWord={R.riskLevel[hepaticRisk.level] || hepaticRisk.label} />
       </div>
 
-      {/* Critical banner */}
       {isCritical && (
-        <div className="mx-4 mb-2 px-3 py-2 bg-red-100 border border-red-200 rounded-lg flex items-start gap-2">
-          <AlertTriangle size={13} className="text-red-600 shrink-0 mt-0.5" />
-          <p className="text-[11px] text-red-700 leading-relaxed">
-            {t.results.organLoadCriticalPrefix} <strong>{renal}%</strong> {t.results.organLoadCriticalBody}
+        <div className="relative mt-4 py-0.5 pl-3.5">
+          <span aria-hidden="true" className="absolute inset-y-0 left-0 w-[3px] bg-red-500" />
+          <p className="kicker text-[10.5px] text-red-700">{R.compromisedKidney}</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-700">
+            {R.organLoadCriticalPrefix} <strong className="font-semibold text-red-700 tnum">{renal}%</strong> {R.organLoadCriticalBody}
           </p>
         </div>
       )}
 
-      {/* Organ burden bars — always visible */}
-      <div className="px-4 pb-3 space-y-2.5">
-        <OrganBar
-          label={t.results.renalEliminationBurden}
-          pct={renal}
-          barColor={renalRisk.bar}
-          textColor={renalRisk.text}
-          labelRight={t.results.riskLevel[renalRisk.level] || renalRisk.label}
-        />
-        <OrganBar
-          label={t.results.hepaticEliminationBurden}
-          pct={hepatic}
-          barColor={hepaticRisk.bar}
-          textColor={hepaticRisk.text}
-          labelRight={t.results.riskLevel[hepaticRisk.level] || hepaticRisk.label}
-        />
-      </div>
+      <table className="mt-5 w-full table-fixed border-collapse text-left">
+        <caption className="kicker pb-2 text-left text-[10px] text-ink-400">{R.perDrugContribution}</caption>
+        <thead>
+          <tr className="border-y border-ink-200">
+            <th scope="col" className="py-1.5 text-[11px] font-medium text-ink-500">{t.pk.drugColumn}</th>
+            <th scope="col" className="w-[52px] py-1.5 text-right text-[11px] font-medium text-ink-500">{R.renalShort}</th>
+            <th scope="col" className="w-[52px] py-1.5 text-right text-[11px] font-medium text-ink-500">{R.hepaticShort}</th>
+            <th scope="col" className="w-[48px] py-1.5 text-right text-[11px] font-medium text-ink-500">{R.doseFactor}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {contributions.map((c, i) => {
+            const scaled = c.doseScalingApplied && c.doseModifier !== 1.0;
+            return (
+              <tr key={c.drugId || i} className="border-b border-ink-100">
+                <td className="truncate py-2 pr-2 text-[13px] text-ink-800" title={c.drugName}>{c.drugName}</td>
+                <td className="py-2 text-right font-mono text-[12.5px] text-ink-900 tnum">{c.scaledRenal}%</td>
+                <td className="py-2 text-right font-mono text-[12.5px] text-ink-900 tnum">{c.scaledHepatic}%</td>
+                <td className={`py-2 text-right font-mono text-[12px] tnum ${scaled ? (c.doseModifier > 1 ? 'text-amber-700' : 'text-ink-700') : 'text-ink-300'}`}>
+                  {c.doseScalingApplied ? `×${c.doseModifier}` : '—'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
 
-      {/* Per-drug breakdown — always expanded */}
-      <div className="px-4 pb-3 border-t border-slate-100 pt-3">
-        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-          {t.results.perDrugContribution}
-        </p>
-        <div className="space-y-1.5">
-          {contributions.map((c, i) => (
-            <div key={i} className="flex flex-col gap-0.5 py-1 border-b border-slate-50 last:border-0">
-              <div className="flex items-center gap-2 text-[11px]">
-                <span className="font-medium text-slate-700 w-32 truncate shrink-0">{c.drugName}</span>
-                <span className="text-slate-400 font-mono">
-                  {t.results.renalShort} <span className="text-slate-600 font-semibold">{c.scaledRenal}%</span>
-                </span>
-                <span className="text-slate-300">·</span>
-                <span className="text-slate-400 font-mono">
-                  {t.results.hepaticShort} <span className="text-slate-600 font-semibold">{c.scaledHepatic}%</span>
-                </span>
-                {c.doseScalingApplied && c.doseModifier !== 1.0 && (
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${c.doseModifier > 1 ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
-                    ×{c.doseModifier}
-                  </span>
-                )}
-              </div>
-              {c.doseScalingApplied && c.doseModifier !== 1.0 && (
-                <div className="text-[10px] text-slate-400 pl-[9.5rem]">
-                  {t.results.doseScalingApplied}: {c.baseRenal}% → {c.scaledRenal}%
-                </div>
-              )}
-              {!c.doseScalingApplied && (
-                <div className="text-[10px] text-slate-400 pl-[9.5rem]">
-                  {t.results.doseScalingNotApplied}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
-          {t.results.organLoadFootnote}
-        </p>
+      <div className="mt-3 space-y-1.5 text-[12px] leading-relaxed text-ink-400">
+        {anyUnscaled && <p><span className="font-mono text-ink-500">—</span> {R.doseScalingNotApplied}</p>}
+        <p>{R.organLoadFootnote}</p>
       </div>
-    </div>
+    </section>
   );
 }

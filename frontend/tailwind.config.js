@@ -1,10 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 
 // ── nuvovet brand tokens ──────────────────────────────────────────
-// Master brand is monochrome (ink), like the dog logo.
-// Each product line owns one accent hue:
-//   nuvovet DUR    → teal   (clinical, "monitoring")
-//   nuvovet Claims → violet (paperwork, insurance)
+// Master brand is monochrome (ink). Each product line owns one hue:
+//   nuvoDUR    → teal   (clinical, "monitoring")
+//   nuvoClaim  → violet (paperwork, insurance)
 // Severity colours (red / amber / yellow / emerald) stay reserved for
 // clinical meaning and never double as brand colours.
 
@@ -61,17 +60,24 @@ export default {
         ink,
         dur,
         claims,
-        // The simulated clinic EMR uses its own neutral/blue palette so it
-        // reads as a *different* product from the nuvovet DUR island.
+        // The simulated clinic EMR is a classic Windows desktop app — its own
+        // grey/blue palette, so the dark nuvoDUR island reads as a layer on top.
         emr: {
-          bg: '#EDF0F4',
+          bg: '#E4E8ED',
+          chrome: '#F3F4F6',
           panel: '#FFFFFF',
-          line: '#DCE1E8',
-          head: '#F5F7FA',
-          blue: '#2B6CEB',
-          blueSoft: '#E8F0FE',
-          text: '#1E2633',
-          muted: '#697386',
+          line: '#C9D0D9',
+          grid: '#E2E6EC',
+          head: '#EEF1F5',
+          label: '#F2F4F7',
+          alt: '#F8FAFC',
+          select: '#CCE4FF',
+          blue: '#1F6FD1',
+          blueDark: '#1859AA',
+          blueSoft: '#E6F0FC',
+          text: '#16191D',
+          muted: '#5E6875',
+          faint: '#8B95A3',
         },
         // Severity tones tuned for the dark DUR island surface
         island: {
@@ -142,6 +148,10 @@ export default {
           '0%': { transform: 'translate(-50%, -50%) scale(0.4)', opacity: '0.6' },
           '100%': { transform: 'translate(-50%, -50%) scale(2.2)', opacity: '0' },
         },
+        'load-sweep': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(300%)' },
+        },
       },
       animation: {
         'island-pulse': 'island-pulse 2.2s cubic-bezier(0.2, 0.6, 0.4, 1) infinite',
@@ -152,6 +162,7 @@ export default {
         'float-slow': 'float-slow 6s ease-in-out infinite',
         'sheet-up': 'sheet-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both',
         'click-ring': 'click-ring 0.5s ease-out forwards',
+        'load-sweep': 'load-sweep 1.1s cubic-bezier(0.45, 0, 0.55, 1) infinite',
       },
     },
   },

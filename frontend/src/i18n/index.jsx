@@ -53,32 +53,51 @@ export function useI18n() {
 }
 
 // ── Compact segmented toggle (한 / EN) ────────────────────────────
-export function LangToggle({ className = '' }) {
+// tone="light" (default) for white bars, tone="dark" for near-black bars.
+// Segments are 26px tall; an invisible ::after extends each hit area to
+// 40px so the toggle stays comfortable to tap.
+const LANG_TONES = {
+  light: {
+    track: 'bg-ink-100/70 ring-ink-200/80',
+    on: 'bg-white text-ink-900 shadow-[0_1px_2px_rgba(11,18,32,0.10)] ring-1 ring-ink-900/[0.06]',
+    off: 'text-ink-500 hover:text-ink-900',
+  },
+  dark: {
+    track: 'bg-white/[0.06] ring-white/10',
+    on: 'bg-white text-ink-900',
+    off: 'text-white/55 hover:text-white',
+  },
+};
+
+export function LangToggle({ className = '', tone = 'light' }) {
   const { lang, setLang } = useI18n();
+  const s = LANG_TONES[tone] || LANG_TONES.light;
   const opts = [
-    { code: 'ko', label: '한', aria: '한국어' },
-    { code: 'en', label: 'EN', aria: 'English' },
+    { code: 'ko', label: '한', aria: '한국어', font: 'font-sans text-[12px]' },
+    { code: 'en', label: 'EN', aria: 'English', font: 'font-mono text-[10.5px] tracking-[0.08em]' },
   ];
   return (
     <span
       role="group"
-      aria-label="Language"
-      className={`inline-flex items-center rounded-full bg-ink-100/80 p-0.5 ring-1 ring-inset ring-ink-200/70 ${className}`}
+      aria-label="Language / 언어"
+      className={`inline-flex shrink-0 items-center gap-px rounded-md p-[3px] ring-1 ring-inset ${s.track} ${className}`}
     >
-      {opts.map((o) => (
-        <button
-          key={o.code}
-          type="button"
-          onClick={() => setLang(o.code)}
-          aria-pressed={lang === o.code}
-          aria-label={o.aria}
-          className={`h-7 min-w-[34px] rounded-full px-2 text-[12px] font-semibold transition-all ${
-            lang === o.code ? 'bg-white text-ink-900 shadow-sm ring-1 ring-ink-900/5' : 'text-ink-500 hover:text-ink-800'
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
+      {opts.map((o) => {
+        const on = lang === o.code;
+        return (
+          <button
+            key={o.code}
+            type="button"
+            lang={o.code}
+            onClick={() => setLang(o.code)}
+            aria-pressed={on}
+            aria-label={o.aria}
+            className={`relative h-[26px] min-w-[34px] rounded-[4px] px-2 font-semibold leading-none transition-colors after:absolute after:inset-x-0 after:-inset-y-[7px] after:content-[''] ${o.font} ${on ? s.on : s.off}`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </span>
   );
 }
