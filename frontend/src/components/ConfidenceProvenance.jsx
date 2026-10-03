@@ -102,7 +102,7 @@ export function ConfidenceProvenance({ confidenceScore, drugs = [], species = 'd
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
           aria-controls={panelId}
-          className="-ml-1 mt-2 inline-flex h-10 items-center rounded-md px-1 text-[13px] font-medium text-ink-600 underline decoration-ink-300 underline-offset-[5px] transition-colors hover:text-ink-900 hover:decoration-ink-600"
+          className="no-print -ml-1 mt-2 inline-flex h-10 items-center rounded-md px-1 text-[13px] font-medium text-ink-600 underline decoration-ink-300 underline-offset-[5px] transition-colors hover:text-ink-900 hover:decoration-ink-600"
         >
           {expanded ? R.hideBreakdown : R.whyThisScore}
         </button>

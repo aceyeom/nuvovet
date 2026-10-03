@@ -127,16 +127,18 @@ export function SiteNav({ onRequestAccess }) {
     setOpen(false);
   }, []);
 
-  const solid = scrolled || open;
-
   return (
     <header
       ref={headerRef}
       className={cx(
         'sticky top-0 z-50 text-white transition-[background-color,border-color] duration-300',
-        solid
-          ? 'border-b border-white/[0.08] bg-[#05070D]/[0.82] backdrop-blur-xl backdrop-saturate-150'
-          : 'border-b border-transparent bg-transparent',
+        // no backdrop-filter while the menu is open: it would become the
+        // containing block of the fixed menu sheet
+        open
+          ? 'border-b border-white/[0.08] bg-[#05070D]'
+          : scrolled
+            ? 'border-b border-white/[0.08] bg-[#05070D]/[0.94] backdrop-blur-xl backdrop-saturate-150'
+            : 'border-b border-transparent bg-transparent',
       )}
     >
       <a
@@ -256,8 +258,8 @@ export function SiteFooter({ onRequestAccess }) {
   return (
     <footer className="relative overflow-hidden bg-[#05070D] text-white">
       <div className={WRAP}>
-        <div className="grid grid-cols-1 gap-12 border-t border-white/[0.1] pb-12 pt-14 sm:grid-cols-2 lg:grid-cols-12 lg:gap-8 lg:pb-16">
-          <div className="sm:col-span-2 lg:col-span-5">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-12 border-t border-white/[0.1] pb-12 pt-14 lg:grid-cols-12 lg:gap-8 lg:pb-16">
+          <div className="col-span-2 lg:col-span-5">
             <Link to="/" aria-label={N.home} className="-mx-1 inline-flex h-10 items-center rounded-md px-1">
               <NuvovetWordmark height={20} className="text-white" title="nuvovet" />
             </Link>
@@ -291,7 +293,7 @@ export function SiteFooter({ onRequestAccess }) {
             </ul>
           </nav>
 
-          <div className="lg:col-span-2">
+          <div className="col-span-2 lg:col-span-2">
             <p className="kicker text-[10.5px] text-white/35">{L.footerLanguage}</p>
             <LangToggle tone="dark" className="mt-5" />
           </div>

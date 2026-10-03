@@ -351,43 +351,45 @@ function BuddyScreen({ buddy, lines, overlay, focusIds, tx = [], toolbar = 'cons
  * same docking as the hero: the island's upper half sits above the
  * window, its lower half over the empty centre of the title bar.
  *
- * The EMR lays out at `minDesign` px (or wider) and is scaled down to fit,
- * like the hero; the island is never scaled, so it stays crisp. `fill`
- * lets the frame take the height its flex parent gives it.
+ * The EMR lays out at `minDesign` px (or wider) and is zoomed down to fit,
+ * like the hero (CSS zoom, so its text is set at the final size); the
+ * island is never scaled. `fill` lets the frame take the height its flex
+ * parent gives it.
  */
 function DockFrame({ height = 240, fill = false, minDesign = 760, screen, dock, dims = false, fade = false, className = '' }) {
   const [ref, { w }] = useElementSize();
   const [winRef, win] = useElementSize();
   const [dockRef, d] = useElementSize();
-  const designW = Math.max(w, minDesign);
+  const narrow = w > 0 && w < 520;
+  const designW = Math.max(w, narrow ? 640 : minDesign);
   const s = w ? w / designW : 1;
   const above = dims ? 32 : 0; // room for the width dimension above the island
   const half = d.h ? Math.min(d.h, 40) / 2 : 20;
   const needWin = Math.max(0, d.h - half + 40); // the expanded card must fit inside
   const winH = Math.max(Math.round(height * s), needWin);
   const style = fill
-    ? { minHeight: above + half + Math.max(needWin, 240) }
+    ? { minHeight: above + half + winH }
     : { height: above + half + winH };
   return (
     <Decorative innerRef={ref} className={cx('relative', fill && 'flex-1', className)} style={style}>
       <div
         ref={winRef}
-        className={cx('absolute inset-x-0 bottom-0 overflow-hidden border border-ink-900/[0.16] bg-emr-bg', fade && 'mask-fade-b')}
+        className={cx('absolute inset-x-0 bottom-0 isolate overflow-hidden border border-ink-900/[0.16] bg-emr-bg', fade && 'mask-fade-b')}
         style={{ top: above + half }}
       >
         {w > 0 && (
           <div
             className="absolute left-0 top-0 flex flex-col bg-emr-bg"
-            style={{ width: designW, minHeight: win.h / s, transform: s < 1 ? `scale(${s})` : undefined, transformOrigin: 'top left' }}
+            style={{ width: designW, minHeight: win.h / s, zoom: s < 1 ? s : undefined }}
           >
             {screen}
           </div>
         )}
       </div>
-      <div className="absolute inset-x-0 flex justify-center px-3" style={{ top: above }}>
+      <div className="absolute inset-x-0 z-10 flex justify-center px-3" style={{ top: above }}>
         <div ref={dockRef} className="relative">
           {typeof dock === 'function' ? dock(w) : dock}
-          {dims && <Dims w={d.w} h={d.h} vertical={dims === 'both'} />}
+          {dims && <Dims w={d.w} h={d.h} vertical={dims === 'both' && !narrow} />}
         </div>
       </div>
     </Decorative>
@@ -491,10 +493,10 @@ export function TrustStats() {
         </dl>
         <div className="flex flex-col gap-2 border-t border-white/[0.1] py-5 sm:flex-row sm:items-baseline sm:gap-6">
           <Kicker className="shrink-0 text-white/40">{L.sourcesLabel}</Kicker>
-          <p className="text-[13px] leading-relaxed text-white/60">
+          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-white/60">
             {L.sources.map((src, i) => (
               <React.Fragment key={src}>
-                {i > 0 && <span aria-hidden="true" className="mx-2.5 text-white/25">/</span>}
+                {i > 0 && <span aria-hidden="true" className="text-white/25">{'  /  '}</span>}
                 <span className="whitespace-nowrap">{src}</span>
               </React.Fragment>
             ))}
@@ -516,7 +518,7 @@ function ProductColumn({ product, status, tagline, bullets, specimen, actions, c
         <h3><ProductLockup product={product} size="2xl" className="!text-[44px] sm:!text-[54px]" /></h3>
         <Kicker className={cx('pb-1.5', accent)}>{status}</Kicker>
       </div>
-      <p className="mt-5 max-w-md text-pretty text-[19px] font-medium leading-snug tracking-[-0.015em] text-ink-700 sm:text-[21px]">{tagline}</p>
+      <p className="mt-5 max-w-lg text-balance text-[19px] font-medium leading-snug tracking-[-0.015em] text-ink-700 sm:text-[21px]">{tagline}</p>
       <ol className="mt-8 border-t border-ink-900/10">
         {bullets.map((b, i) => (
           <li key={b} className="flex gap-5 border-b border-ink-900/10 py-4">
@@ -629,7 +631,7 @@ export function IslandStates() {
                 <DockFrame
                   height={252}
                   dims="both"
-                  screen={<BuddyScreen buddy={buddy} lines={buddy.before} />}
+                  screen={<BuddyScreen buddy={buddy} lines={buddy.before} extra />}
                   dock={(w) => <DurIsland view="compact" size={w < 420 ? 'sm' : 'md'} status={buddy.glance} labels={labels} interactive={false} />}
                 />
                 <StateCaption n={1} title={s1.title} desc={s1.desc} />
@@ -638,7 +640,7 @@ export function IslandStates() {
                 <DockFrame
                   height={252}
                   dims="both"
-                  screen={<BuddyScreen buddy={buddy} lines={buddy.after} overlay={buddy.overlay} />}
+                  screen={<BuddyScreen buddy={buddy} lines={buddy.after} overlay={buddy.overlay} extra />}
                   dock={(w) => <DurIsland view="compact" size={w < 420 ? 'sm' : 'md'} status={buddy.alert} labels={labels} interactive={false} />}
                 />
                 <StateCaption n={2} title={s2.title} desc={s2.desc} />
@@ -647,6 +649,7 @@ export function IslandStates() {
             <Reveal delay={180} className="flex flex-col">
               <DockFrame
                 fill
+                height={560}
                 dims
                 screen={<BuddyScreen buddy={buddy} lines={buddy.after} overlay={buddy.overlay} focusIds={buddy.focusIds} tx={BUDDY_TX} extra />}
                 dock={(w) => (
@@ -766,8 +769,8 @@ function LedgerRow({ r, i, selected, onSelect, latinMono }) {
 
         <span className="col-start-2 mt-1.5 min-w-0 lg:col-start-auto lg:mt-0 lg:pr-5">
           <span className="block text-[15px] font-semibold leading-snug tracking-[-0.01em] text-white">{r.d.title}</span>
-          <span className={cx('mt-1 block truncate text-[12.5px] text-white/50', latinMono)}>
-            {r.drugsText}
+          <span className="mt-1 block truncate text-[12.5px] text-white/50">
+            <span className={latinMono}>{r.drugsText}</span>
             <span className="lg:hidden"> — {r.patientShort}</span>
           </span>
           <span className="mt-2 block text-pretty text-[13px] leading-snug text-white/60">
@@ -856,16 +859,16 @@ export function Engines() {
                 <LedgerRow key={r.key} r={r} i={i} selected={i === idx} onSelect={() => select(i, true)} latinMono={latinMono} />
               ))}
             </ol>
-            <div className="mt-10 border-t border-white/[0.08] pt-5">
+            <div className="mt-12">
               <Kicker className="text-white/40">{fmt(L.rulesLabel, { n: ruleTitles.length })}</Kicker>
-              <p className="mt-3 text-[13px] leading-[1.8] text-white/50">
+              <ol className="mt-4 grid grid-cols-1 gap-x-8 border-b border-white/[0.08] sm:grid-cols-2">
                 {ruleTitles.map((title, i) => (
-                  <React.Fragment key={title}>
-                    {i > 0 && <span aria-hidden="true" className="mx-2 text-white/20">/</span>}
-                    <span className="whitespace-nowrap">{title}</span>
-                  </React.Fragment>
+                  <li key={title} className="flex min-w-0 items-baseline gap-4 border-t border-white/[0.08] py-2.5">
+                    <span className="w-5 shrink-0 font-mono text-[11px] text-white/30 tnum">{String(i + 1).padStart(2, '0')}</span>
+                    <span className="min-w-0 text-[13px] leading-snug text-white/60">{title}</span>
+                  </li>
                 ))}
-              </p>
+              </ol>
             </div>
           </Reveal>
 
@@ -880,7 +883,7 @@ export function Engines() {
                     {String(idx + 1).padStart(2, '0')} / {String(rows.length).padStart(2, '0')}
                   </span>
                 </div>
-                <div ref={stageRef} className="relative flex min-h-[460px] justify-center overflow-hidden px-3 pb-10 pt-10 sm:min-h-[440px]">
+                <div ref={stageRef} className="relative flex min-h-[412px] justify-center overflow-hidden px-3 pb-10 pt-10 lg:min-h-[396px]">
                   <span
                     aria-hidden="true"
                     className="pointer-events-none absolute left-1/2 top-[-60px] h-[420px] w-[560px] -translate-x-1/2"
@@ -902,10 +905,10 @@ export function Engines() {
                     />
                   </div>
                 </div>
-                <dl className="grid grid-cols-1 border-t border-white/[0.08] sm:grid-cols-2">
+                <dl className="grid grid-cols-1 border-t border-white/[0.08] sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
                   <div className="min-w-0 px-4 py-3.5 sm:px-5">
                     <dt className="kicker text-[10px] text-white/35">{L.ledgerPatient}</dt>
-                    <dd className="mt-1.5 truncate text-[13px] text-white/75">{row.patientLine}</dd>
+                    <dd className="mt-1.5 truncate text-[12.5px] text-white/75">{row.patientLine}</dd>
                   </div>
                   <div className="min-w-0 border-t border-white/[0.08] px-4 py-3.5 sm:border-l sm:border-t-0 sm:px-5">
                     <dt className="kicker text-[10px] text-white/35">{L.ledgerId}</dt>
@@ -973,7 +976,7 @@ export function Coverage() {
           </Reveal>
 
           <Reveal delay={120} className="lg:col-span-4 lg:col-start-9">
-            <Kicker className="border-b border-ink-900/20 pb-3 text-[10.5px] text-ink-400">{L.severityTitle}</Kicker>
+            <Kicker className="pb-3 text-[10.5px] text-ink-400">{L.severityTitle}</Kicker>
             <ul>
               {levels.map((l) => (
                 <li key={l.key} className="relative grid grid-cols-[92px_minmax(0,1fr)] gap-4 py-5 sm:grid-cols-[104px_minmax(0,1fr)]">
@@ -1117,7 +1120,7 @@ export function ClaimsSection({ onWaitlist }) {
             </div>
           </SectionHead>
 
-          <div className="mt-16 grid grid-cols-1 gap-14 sm:mt-20 lg:grid-cols-12 lg:gap-x-8 lg:gap-y-14">
+          <div className="mt-16 grid grid-cols-1 gap-14 sm:mt-20 lg:grid-cols-12 lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-16">
             <ClaimBlock n={1} title={L.claimsSteps[0]} desc={L.claimsStepsDesc[0]} className="lg:col-span-5 lg:row-start-1">
               <Decorative className="border border-ink-900/15 bg-emr-bg">
                 <EmrTitleBar />

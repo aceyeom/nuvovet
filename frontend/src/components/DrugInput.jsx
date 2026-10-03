@@ -70,8 +70,8 @@ function PrescriptionRow({ drug, index, species, weight, onRemove, onUpdateDose 
   const secondaryName = lang === 'ko' ? drug.nameKr : null;
 
   return (
-    <li className={`relative grid grid-cols-[22px_minmax(0,1fr)_auto] gap-x-3 gap-y-2.5 border-t border-ink-100 py-3.5 sm:grid-cols-[22px_minmax(0,1fr)_132px_76px_auto] sm:items-center ${hardstop ? 'pl-3' : ''}`}>
-      {hardstop && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] bg-red-500" />}
+    <li className="relative grid grid-cols-[22px_minmax(0,1fr)_auto] gap-x-3 gap-y-2.5 border-t border-ink-100 py-3.5 sm:grid-cols-[22px_minmax(0,1fr)_132px_76px_auto] sm:items-center">
+      {hardstop && <span aria-hidden="true" className="absolute inset-y-2 -left-3 w-[3px] bg-red-500" />}
 
       <span className="pt-[3px] font-mono text-[11px] text-ink-400 tnum sm:pt-0">{String(index + 1).padStart(2, '0')}</span>
 
@@ -85,10 +85,10 @@ function PrescriptionRow({ drug, index, species, weight, onRemove, onUpdateDose 
           <span className={`kicker text-[10px] ${src.tone}`}>{src.label}</span>
         </p>
         {hardstop && (
-          <p className="mt-2 text-[13px] leading-relaxed text-red-800">
-            <span className="kicker mr-2 text-[10.5px] text-red-700">{t.drugInput.speciesContraindication}</span>
-            {hardstop}
-          </p>
+          <div className="mt-2" role="alert">
+            <p className="kicker text-[10.5px] text-red-700">{t.drugInput.speciesContraindication}</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-red-800">{hardstop}</p>
+          </div>
         )}
       </div>
 

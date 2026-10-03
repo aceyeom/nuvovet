@@ -40,14 +40,32 @@ const sevKey = (label) => {
   return SEV[l] ? l : l === 'clear' ? 'none' : 'unknown';
 };
 
+// The app's own @font-face rules (Pretendard, Geist Mono), so the printed
+// report is set in the same type as the screen. URLs resolve through <base>.
+function collectFontFaces() {
+  let css = '';
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules;
+    try { rules = sheet.cssRules; } catch { continue; } // cross-origin sheet
+    for (const rule of Array.from(rules || [])) {
+      if (rule.type === 5 /* CSSRule.FONT_FACE_RULE */) css += `${rule.cssText}\n`;
+    }
+  }
+  return css;
+}
+
+function formatStamp(iso, lang) {
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  if (lang === 'ko') return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return d.toLocaleString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 function buildPrintHTML({ results, patientInfo, drugs = [], contextFindings = [], t, lang }) {
   const R = t.results;
   const P = R.pdf;
   const { interactions, drugFlags, confidenceScore, timestamp } = results;
-  const locale = lang === 'ko' ? 'ko-KR' : 'en-GB';
-  const dateStr = new Date(timestamp).toLocaleString(locale, {
-    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
-  });
+  const dateStr = formatStamp(timestamp, lang);
   const n = drugFlags.length;
   const pairs = (n * (n - 1)) / 2;
   const sevWord = (k) => R.sev?.[k] ?? k;
@@ -113,6 +131,8 @@ function buildPrintHTML({ results, patientInfo, drugs = [], contextFindings = []
 <html lang="${lang === 'ko' ? 'ko' : 'en'}">
 <head>
   <meta charset="UTF-8" />
+  <base href="${esc(window.location.origin)}/" />
+  <style>${collectFontFaces()}</style>
   <title>${esc(P.docTitle)} — ${esc(patientInfo?.name || R.untitledPatient)} — ${esc(reportId(results))}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -275,7 +295,11 @@ export function ScanExportButton({ results, patientInfo, drugs, species, context
     printWin.document.write(html);
     printWin.document.close();
     printWin.focus();
-    setTimeout(() => printWin.print(), 400);
+    // Print once the brand fonts are in (or after 1.5 s at the latest)
+    let printed = false;
+    const doPrint = () => { if (!printed) { printed = true; printWin.print(); } };
+    printWin.document.fonts?.ready?.then(() => setTimeout(doPrint, 150));
+    setTimeout(doPrint, 1500);
   };
 
   return (

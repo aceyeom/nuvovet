@@ -64,6 +64,7 @@ function Kicker({ children, className = '' }) {
 // ── Masthead ────────────────────────────────────────────────────
 
 function Masthead({ results, patientInfo, species, embedded, onBack }) {
+  const titleSize = embedded ? 'text-[24px] sm:text-[28px]' : 'text-[28px] sm:text-[34px]';
   const { t, lang } = useI18n();
   const R = t.results;
   const F = t.fullSystem;
@@ -104,7 +105,7 @@ function Masthead({ results, patientInfo, species, embedded, onBack }) {
             {R.durReport} <span className="mx-1.5 text-ink-300" aria-hidden="true">/</span>
             <span className="font-mono tracking-[0.06em]">{reportId(results)}</span>
           </p>
-          <h2 className="mt-2 text-balance text-[28px] font-bold leading-[1.1] tracking-[-0.03em] text-ink-900 sm:text-[34px]">
+          <h2 className={`mt-2 text-balance font-bold leading-[1.1] tracking-[-0.03em] text-ink-900 ${titleSize}`}>
             {patientInfo?.name || fmt(R.anonPatient, { species: speciesShort })}
           </h2>
           {meta.length > 0 && <p className="mt-2 text-[14px] text-ink-500">{meta.join(' · ')}</p>}
@@ -289,7 +290,7 @@ function InteractionItem({ interaction, index, acknowledged, noted, onAcknowledg
             </span>
           )}
         </span>
-        <span className="kicker mt-0.5 whitespace-nowrap text-[10.5px] text-ink-400 transition-colors group-hover:text-ink-900">
+        <span className="no-print kicker mt-0.5 whitespace-nowrap text-[10.5px] text-ink-400 transition-colors group-hover:text-ink-900">
           {expanded ? R.collapse : R.expand}
         </span>
       </button>
@@ -360,7 +361,7 @@ function InteractionItem({ interaction, index, acknowledged, noted, onAcknowledg
           )}
 
           {/* Evidence */}
-          <div className="mt-5 border-t border-ink-100 pt-3">
+          <div className={`mt-5 border-t border-ink-100 pt-3 ${showLiterature ? '' : 'no-print'}`}>
             <button
               type="button"
               onClick={() => setShowLiterature((v) => !v)}
@@ -430,7 +431,7 @@ function InteractionItem({ interaction, index, acknowledged, noted, onAcknowledg
 // ── Patient-context finding (allergy, drug–disease, dose, species, organ) ──
 
 function ContextItem({ finding: f }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const R = t.results;
   const sev = { label: CONTEXT_SEVERITY[f.severity] || 'Unknown' };
   return (
@@ -442,7 +443,7 @@ function ContextItem({ finding: f }) {
         {f.reviewed && <span className="kicker text-[10.5px] text-emerald-700">{R.reviewed}</span>}
       </p>
       <p className={`mt-1.5 text-[16px] font-semibold leading-snug tracking-[-0.01em] ${f.reviewed ? 'text-ink-500' : 'text-ink-900'}`}>{f.title}</p>
-      {f.drugsLabel && <p className="mt-0.5 font-mono text-[11.5px] text-ink-500">{f.drugsLabel}</p>}
+      {f.drugsLabel && <p className={`mt-0.5 text-[12px] text-ink-500 ${lang === 'ko' ? '' : 'font-mono'}`}>{f.drugsLabel}</p>}
       {f.summary && <p className="mt-2 max-w-[68ch] text-[14px] leading-relaxed text-ink-700">{f.summary}</p>}
       {f.suggestion && (
         <p className="mt-2.5 max-w-[68ch] text-[14px] font-medium leading-relaxed text-ink-900">

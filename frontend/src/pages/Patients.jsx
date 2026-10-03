@@ -382,7 +382,7 @@ export default function Patients() {
                       <tr className="border-b border-ink-900">
                         <th scope="col" className="kicker py-2.5 pr-4 text-[10.5px] font-semibold text-ink-900">{P.colPatient}</th>
                         <th scope="col" className="kicker py-2.5 pr-4 text-[10.5px] font-semibold text-ink-900">{P.colSignalment}</th>
-                        <th scope="col" className="kicker py-2.5 pr-4 text-right text-[10.5px] font-semibold text-ink-900">{P.colWeight}</th>
+                        <th scope="col" className="kicker py-2.5 pr-10 text-right text-[10.5px] font-semibold text-ink-900">{P.colWeight}</th>
                         <th scope="col" className="kicker py-2.5 pr-4 text-[10.5px] font-semibold text-ink-900">{P.colLastVisit}</th>
                         <th scope="col" className="kicker py-2.5 pr-4 text-[10.5px] font-semibold text-ink-900">{P.colResult}</th>
                         <th scope="col" className="w-20 py-2.5"><span className="sr-only">{P.open}</span></th>
@@ -398,7 +398,7 @@ export default function Patients() {
                               {p.owner_phone && <span className="mt-0.5 block font-mono text-[11.5px] text-ink-400 tnum">{p.owner_phone}</span>}
                             </td>
                             <td className="py-3.5 pr-4 text-[13.5px] text-ink-700">{signalment(p)}</td>
-                            <td className="py-3.5 pr-4 text-right font-mono text-[13px] text-ink-900 tnum">{p.weight_kg ? `${p.weight_kg} kg` : '—'}</td>
+                            <td className="py-3.5 pr-10 text-right font-mono text-[13px] text-ink-900 tnum">{p.weight_kg ? `${p.weight_kg} kg` : '—'}</td>
                             <td className="py-3.5 pr-4 font-mono text-[12.5px] text-ink-600 tnum">{formatDate(lv?.date || p.updated_at)}</td>
                             <td className="py-3.5 pr-4"><ResultWord summary={lv?.dur_summary} /></td>
                             <td className="py-2 text-right">

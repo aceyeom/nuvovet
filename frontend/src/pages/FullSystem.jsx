@@ -77,7 +77,7 @@ function DecimalInput({ value, onChange, onBlur, placeholder, className, min, ma
         className={`${className} font-mono tnum ${suffix ? 'pr-14' : ''}`}
       />
       {suffix && (
-        <span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-ink-400">
+        <span aria-hidden="true" className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-ink-400 ${/^[\x20-\x7E]+$/.test(suffix) ? 'font-mono' : ''}`}>
           {suffix}
         </span>
       )}
