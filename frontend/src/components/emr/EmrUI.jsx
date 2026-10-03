@@ -323,7 +323,8 @@ function InfoCell({ label, children, span = 1, tone, narrow = false }) {
     <div className={cx('flex min-w-0 border-b border-r border-emr-grid', span === 2 && 'col-span-2', span === 'full' && 'col-span-full')}>
       <span className={cx('flex shrink-0 items-center border-r border-emr-grid bg-emr-label text-[11.5px] text-[#4B5563]', narrow ? 'w-[58px] px-1.5' : 'w-[74px] px-2')}>{label}</span>
       <span className={cx('flex min-w-0 flex-1 items-center px-2 py-[3px] text-[12px]', tone === 'alert' ? 'font-semibold text-[#C81E1E]' : 'text-emr-text')}>
-        <span className="min-w-0 truncate">{children}</span>
+        {/* plain-text values get the full text on hover when they truncate */}
+        <span className="min-w-0 truncate" title={typeof children === 'string' ? children : undefined}>{children}</span>
       </span>
     </div>
   );

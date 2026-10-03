@@ -71,21 +71,3 @@ export function FormularyStatus({ connected }) {
     </span>
   );
 }
-
-// Legacy pharmacy-OS header (kept for API compatibility; not routed).
-export const Header = ({ workflowStep, onExecuteDUR }) => {
-  const title = workflowStep === 'entry' ? 'Prescription entry' : workflowStep === 'review' ? 'Clinical safety audit' : 'Final order verification';
-  return (
-    <header className="flex h-16 items-center justify-between border-b border-ink-200 bg-white px-6">
-      <div className="flex items-baseline gap-4">
-        <ProductLockup product="dur" size="sm" />
-        <span className="kicker text-[10.5px] text-ink-500">{title}</span>
-      </div>
-      {workflowStep === 'entry' && (
-        <button type="button" onClick={onExecuteDUR} className="h-10 rounded-lg bg-ink-900 px-5 text-[13px] font-semibold text-white hover:bg-ink-800">
-          Run DUR check <span aria-hidden="true">→</span>
-        </button>
-      )}
-    </header>
-  );
-};

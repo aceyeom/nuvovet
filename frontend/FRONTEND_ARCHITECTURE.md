@@ -10,7 +10,7 @@ nuvovet is a veterinary software platform for companion animals (dogs and cats).
 |-------|--------------|--------|-----------|
 | **nuvovet** | `ink` (monochrome) | — | Master brand. The official wordmark (`NuvovetWordmark`, vectorised from `assets/branding/nuvovet_final.svg`). There is no pictorial mark. |
 | **nuvo<span>DUR</span>** | `dur` (teal) | Live | Drug utilization review that docks on top of the clinic's existing EMR, surfaced through the **nuvoDUR island**. |
-| **nuvo<span>Claim</span>** | `claims` (violet) | Coming soon | Pet-insurance claims assembled from the visit record (marketing preview + waitlist only). |
+| **nuvo<span>Claim</span>** | `claims` (violet) | In development | Pet-insurance claims assembled from the visit record (marketing preview + waitlist only). The status reads "In development" / "개발 중" everywhere (`landing.claimsStatus`). |
 
 Product names are set in type, never as icons or badges (`components/NuvovetLogo.jsx`):
 
@@ -42,15 +42,30 @@ The EMR never contains nuvoDUR elements; nuvoDUR is always an overlay (the islan
 
 **Motion.** Spring-based island morphs (CSS `linear()` spring with a cubic-bezier fallback) and blur crossfades; the hero adds a boot sequence, aurora, particles, a rolling grid floor and HUD instruments. Everything pauses off-screen; `prefers-reduced-motion` shows still frames with manually steppable chapters.
 
+**Page canvas.** The landing page and the demo are dark, the clinic workspace is white. `usePageCanvas(color)` (`lib/usePageCanvas.js`) sets `--page-canvas` (the html/body background that shows on iOS over-scroll) and the `theme-color` meta while a route is mounted; an inline script in `index.html` sets the right value before the first paint, and the route loading screen (`RouteFallback` in `App.jsx`) matches the route it is loading, so nothing flashes white before the hero.
+
 ---
 
 ## User Flows
 
 ### 1. Landing Page (`/`)
 
-1. **Nav** — nuvovet wordmark, product links (nuvoDUR / nuvoClaim, product word coloured), How it works, Live demo, Clinic sign-in, Request access. The mobile menu explains every destination in one line.
-2. **Hero** (`landing/Hero.jsx`, dark) — kicker line, decrypting headline (scrambled glyphs resolve into the text without layout shift, `DecryptText` in `landing/motion.jsx`), subhead, a glowing conic-border CTA to the demo, request access, meta line; then `HeroShowcase` (below).
-3. **Sections** (`landing/Sections.jsx`) — stats, product family, how the island works, engines, coverage, nuvoClaim preview, demo band, final CTA, footer.
+1. **Nav** (`landing/SiteChrome.jsx`) — transparent over the hero, dark glass once scrolled. nuvovet wordmark, product links (nuvoDUR / nuvoClaim with its status), How it works, Live demo, language, Clinic sign-in, Request access; skip link to `#main`. On phones a "Menu" text button opens a full-screen sheet that explains every destination in one line.
+2. **Hero** (`landing/Hero.jsx`, dark) — runs up behind the nav (`-mt-16 pt-16`). Kicker line, decrypting headline (scrambled glyphs resolve into the text without layout shift, `DecryptText` in `landing/motion.jsx`), subhead, a glowing conic-border CTA to the demo, request access, meta line; then `HeroShowcase` (below). Wide-but-short laptop screens (`lg-short` screen in `tailwind.config.js`: ≥1024 px wide, ≤940 px tall) get tighter spacing so the EMR monitor clears the fold.
+3. **Sections** (`landing/Sections.jsx`):
+
+| # | Section | Content |
+|---|---------|---------|
+| — | Stats (dark) | 877 Korean veterinary products · 10 interaction rules · 7 patient-context checks · 1 island |
+| 01 | Product family | nuvoDUR and nuvoClaim side by side, each with its status, tagline, bullets and a small docked specimen |
+| 02 | Island states (`#dur`, `#how`) | The island's states on a real EMR fragment: compact → checking → alert → expanded → resolved |
+| 03 | Engines (dark) | Every check the engine runs, as a live table computed by `analyzeRegimen`, next to a working island |
+| 04 | Coverage | The six-case drug pipeline as a ruled table (how unapproved, foreign and unknown drugs are handled) |
+| 05 | nuvoClaim (`#claims`) | Preview: the EMR visit → an itemised claim statement (₩121,990) → a submission log; waitlist button |
+| 06 | Demo band (dark) | Three steps and today's patient list; every row opens that patient's chart in the demo (`/demo?patient=<id>`) |
+| 07 | Get started | Destinations (demo, clinic sign-in, request access) as large ruled rows |
+
+Then a dark footer.
 
 ### 2. Live EMR demo (`/demo`)
 
@@ -62,10 +77,11 @@ A simulated clinic EMR with nuvoDUR docked on top. No login, no wizard:
 - **nuvoDUR island** docked across the window's top edge (centre of the title bar, which the EMR leaves empty). Flagged rows get a measured overlay box in the severity colour; the rows of the finding open in the island glow.
 - **First-run guide** (3 spotlight steps: the grey window is the EMR → the black island on top is nuvoDUR → run the scenario). Stored in `localStorage` (`nuvovet-demo-guide-v3`), re-openable via "Guide".
 - **Full report** opens `ResultsDisplay` in a sheet (`embedded` mode) including patient-context checks.
+- **Deep link** — `/demo?patient=<id>` (e.g. `australian_shepherd`) opens straight on that chart; the landing page's patient list links here.
 
 ### 3. Clinic workspace (`/system`)
 
-Access-code protected (`vetdur2025`). After sign-in: patient, prescription, run DUR, then the analysis screen and the report. Drug search hits the FastAPI backend and falls back to the local formulary when it is unreachable.
+Access-code protected (`vetdur2025`; remembered for the tab in `sessionStorage` under `nuvovet-workspace-auth`). The gate is a dark panel beside the sign-in form. After sign-in: a two-column review (patient + prescription on the left, a readiness readout on the right; a sticky run bar on phones), then the analysis screen and the report. Drug search hits the FastAPI backend and falls back to the local formulary when it is unreachable. `/patients` lists saved profiles (table on desktop, ruled list on phones) and preloads one into `/system`.
 
 ### 4. Request access / nuvoClaim waitlist (Modal)
 
@@ -101,7 +117,9 @@ Expanded card: severity word + kind ("CRITICAL │ Drug interaction"), ← 1/2 �
 
 A scripted capture built from the real EMR components and the real engine (the alert text is what `analyzeRegimen` returns for Buddy + prednisolone).
 
-**Boot sequence** (once, when a third of the EMR window is in view): a CRT power-on line → the window opens onto a boot log (`[ OK ] Clinic EMR 4.2 · session restored`, `nuvoDUR · overlay attached`, formulary, rules, patient context, `> Monitoring prescriptions_`) with a progress line → a bright edge wipes the log away revealing the EMR with an RGB-split glitch → the island drops in and docks with a shockwave ring while the HUD instruments plug in. The camera rises from a 20° tilt as it boots.
+**Standby** — until it boots, the monitor shows a dim terminal prompt (`nuvoDUR overlay · standby_`) and a resting phosphor line where the power-on line will ignite.
+
+**Boot sequence** (once, when the top 40% of the EMR window is in view — on most laptops that is on load, on shorter screens after a short scroll): a CRT power-on line → the window opens onto a boot log (`[ OK ] Clinic EMR 4.2 · session restored`, `nuvoDUR · overlay attached`, formulary, rules, patient context, `> Monitoring prescriptions_`) with a progress line → a bright edge wipes the log away revealing the EMR with an RGB-split glitch → the island drops in and docks with a shockwave ring while the HUD instruments plug in. The camera rises from a 20° tilt as it boots.
 
 **Loop** (15 s, four chapters, per-chapter camera angles):
 
@@ -138,60 +156,17 @@ Real photographs from Unsplash (Unsplash License — free for commercial use; ph
 
 ## Results Page
 
-The DUR report is the core deliverable. It is structured for clinical decision-making:
+The nuvoDUR report (`ResultsDisplay.jsx`) is set like a lab report — no chips, badges or icons:
 
-### Patient-context checks
-When opened from the live demo, the report also lists the island's patient-context findings (allergy, drug–disease, dose range, species, organ load). The summary band's overall severity is the maximum of pairwise interactions and these findings, so the banner never says "None" above a critical finding.
+- **Masthead** — nuvoDUR lockup, report number, timestamp, patient line; Print / PDF export (`ScanExportPDF.jsx`, printable nuvoDUR report).
+- **Verdict** — the overall severity as a large coloured word (CRITICAL / 심각) with the counts beside it. The overall severity is the maximum of pairwise interactions and the island's patient-context findings, so it never reads "None" above a critical finding.
+- **Findings** — ruled entries, each with a short vertical rule in its severity hue: severity word, rule name in mono, drug pair, drug classes. Expanding shows the mechanism, a ruled **suggested action** (a named alternative with a dose for critical interactions), the 24-hour PK timeline (`DrugTimeline.jsx`) and the literature (plain-language summary first, citations below).
+- **Review** — "Mark as reviewed" / "Note" per finding (never "Override"); reviewed entries are muted and a counter shows X of Y reviewed.
+- **Patient-context checks** — when opened from the demo, the island's findings (allergy, drug–disease, dose range, species, organ load) follow as their own ruled list.
+- **Advisories** — per-drug notes (source: Korean veterinary / off-label / foreign / unverified, MDR1 sensitivity, narrow therapeutic index, species notes), written as words.
+- **Side column** (desktop; after the findings on phones) — patient data, organ load (`OrganLoadIndicator.jsx`) and confidence with its source breakdown (`ConfidenceProvenance.jsx`).
 
-### Summary Band
-Full-width card at the top combining:
-- Overall severity indicator with icon
-- Drug count and interaction count
-- **Severity breakdown chips:** Red "2 Critical", amber "1 Moderate", gray "1 Minor"
-- **Confidence score** with a prominent labeled progress bar — not a footer afterthought
-
-### Interaction Cards — Three-Zone Layout
-
-Each interaction card has three visually distinct zones:
-
-1. **Zone 1 — Header:** Drug pair in bold + drug class chips (small pill badges like "NSAID", "Corticosteroid"). Severity badge and rule name.
-2. **Zone 2 — Mechanism:** Readable body text explaining the pharmacological interaction.
-3. **Zone 3 — Action Box:** Visually distinct tinted box with:
-   - Specific, dosable clinical recommendation
-   - **Alternative drug suggestion** (for Critical interactions) — a named drug with dose, not "consider alternatives"
-   - Example: "Consider Gabapentin 10 mg/kg PO TID for non-serotonergic pain management."
-
-### Drug Timeline Strip
-Each interaction card includes a 24-hour pharmacokinetic timeline:
-- Horizontal bar chart showing drug concentration windows
-- Peak marked with a colored indicator and time label
-- Half-life labeled at the trough
-- Graceful fallback: "PK timeline data not available" for drugs without data
-- All demo breed profile drugs have complete PK data
-
-### Literature References
-One-tap expandable section with:
-- **Plain English summary** — e.g., "A 2012 JAVMA study found that concurrent NSAID use in dogs increased GI bleeding risk by 4.3x."
-- Full academic citations below
-
-### Acknowledgment Flow
-- Each interaction has an "Acknowledged" button (never "Override")
-- Framing: "you've reviewed this" — not "you're ignoring a warning"
-- Acknowledged cards become visually muted (reduced opacity)
-- Never language that implies the doctor is wrong
-
-### Species Badge
-Drug flag cards with species-specific warnings show a 🐕/🐈 badge with colored border, visible before expanding.
-
-### Drug Advisory Flags
-Per-drug cards showing: source (Korean vet, off-label, foreign, unknown), species warnings, MDR1 sensitivity, narrow therapeutic index.
-
-### Scan Summary Card
-Clean single-card summary after all results:
-- Patient name, species, date
-- Drugs screened, interactions found, severity breakdown
-- Acknowledgment status (X of Y reviewed)
-- Formatted cleanly enough to screenshot for a patient file
+`SeverityBadge.jsx` exports the shared severity vocabulary: `SEVERITY_TONE`, `severityKey`, `severityTone`, `severityWord` and the `SeverityBadge` word itself.
 
 ---
 
@@ -227,7 +202,7 @@ Each interaction includes: mechanism, clinical recommendation, alternative sugge
 
 ## Drug Database — Pharmacokinetic Data
 
-28 curated drugs in `drugDatabase.js` for the demo and API fallback. The backend serves 641 drugs loaded from JSONL files. Both use the same frontend Drug contract (see `docs/backend_frontend_connection.md`).
+26 curated drugs in `drugDatabase.js` for the demo and API fallback. The backend serves 641 drugs loaded from JSONL files. Both use the same frontend Drug contract (see `docs/backend_frontend_connection.md`).
 
 Key fields:
 
@@ -264,20 +239,22 @@ Seven cases in today's appointment order. Each carries Korean-EMR registration f
 
 ## Loading Experience
 
-6-step sequential animation with optimized timing (~2.9s total, down from ~4.8s):
+**Route loading** — `RouteFallback` (`App.jsx`): the nuvoDUR lockup and a sweeping hairline, on the canvas of the route being loaded (dark for `/` and `/demo`).
 
-| Step | Duration | Description |
-|------|----------|-------------|
-| Initial delay | 200ms | — |
-| Resolve drug identifiers | 350ms | Database lookup |
-| Query Korean Veterinary DB | 450ms | 877 products |
-| CYP enzyme interaction analysis | 400ms | Enzyme profiling |
-| Pairwise DDI screening | 500ms | Interaction matrix |
-| Species-specific dose verification | 350ms | Dose/weight check |
-| Cross-reference literature | 400ms | PMC, Plumb's, BSAVA |
-| Final transition | 250ms | — |
+**Analysis screen** (`AnalysisScreen.jsx`, workspace) — a typographic readout between "Run DUR check" and the report, ~2.9 s end to end. Six engine steps as a ruled list, each with a status word (queued / running / done), a hairline progress rule and a chart that draws itself underneath:
 
-Visual progress bar at the bottom tracks completion percentage. Uses `useRef` for the `onComplete` callback to avoid stale closure issues.
+| Step | Duration |
+|------|----------|
+| Lead-in | 200 ms |
+| Resolve drug identifiers | 350 ms |
+| Query the Korean veterinary formulary (877 products) | 450 ms |
+| CYP enzyme interaction analysis | 400 ms |
+| Pairwise DDI screening | 500 ms |
+| Species-specific dose verification | 350 ms |
+| Cross-reference literature (PMC, Plumb's, BSAVA) | 400 ms |
+| Hand-off | 250 ms |
+
+Uses a `useRef` for the `onComplete` callback to avoid stale closures.
 
 ---
 
@@ -384,25 +361,14 @@ Rendered below the chart showing: Drug name, t½, Tmax, F%, and dosing schedule 
 
 ## Drug Search & Prescription Input
 
-### Search Modes
+`DrugInput.jsx` (clinic workspace) is an ARIA combobox:
 
-1. **Text search** — type-ahead matching against drug name, generic name, Korean name, and drug class from both `drugDatabase.js` and `drugSearchData.js` catalogs.
-2. **Category browsing** — when search text is empty, shows the full `DRUG_SEARCH_CATALOG` filtered by active class and route. Organized by `CLASS_GROUPS` (11 categories).
+- **Search** — debounced (300 ms); the FastAPI backend first (`searchFn={searchDrugsApi}`), the curated local formulary (`searchDrugs()` in `drugDatabase.js`, ranked by `lib/commonDrugs.ts`) when the backend is unreachable. Matches English, generic and Korean names.
+- **Results** — a listbox (↑/↓, Enter, Escape) showing the Korean name in Korean, plus the source as a word when it matters (off-label human drug, foreign drug, unverified).
+- **Unknown drugs** — the last option adds what was typed as an unverified drug (`createUnknownDrug`), so off-formulary medications still get screened with lower confidence.
+- **Prescription table** — drug, optional dose (mg/kg) and the total for the patient's weight; when a dose is entered, the organ-load figures scale to it.
 
-### Filter UI
-
-Collapsible filter bar with two chip rows:
-- **Class filter:** All, NSAID, Corticosteroid, Antibiotic, Antifungal, Antiemetic, Cardiac, Diuretic, Anxiolytic/Sedative, Anticonvulsant, GI Protectant
-- **Route filter:** All, PO (Oral), SC (Subcutaneous), IV (Intravenous), Topical
-
-Filters are pill-shaped chips with active state styling. All labels are translated via `t.drugClasses` and `t.routes`.
-
-### Doctor Workflow Optimization
-
-- Browse mode shows all available drugs organized by category, matching how doctors think about prescribing (by drug class, then route)
-- Drug names display Korean names when `lang === 'ko'`
-- Unknown drug flow with active ingredient entry for off-formulary medications
-- Pre-populated drug lists from breed profiles in demo mode
+In the demo, prescriptions are entered in the simulated EMR's 처방 검색 instead (`RxSearch` in `emr/EmrUI.jsx`), with 자주 쓰는 처방 shortcuts.
 
 ---
 
@@ -413,8 +379,9 @@ Self-hosted fonts (no font CDN at runtime), imported in `main.jsx`:
 | Font | Package | Usage |
 |------|---------|-------|
 | Pretendard Variable | `pretendard` (dynamic subset) | All UI text, Korean and Latin |
-| Instrument Serif (italic) | `@fontsource/instrument-serif` | English headline accent ("caught.") |
-| Geist Mono Variable | `@fontsource-variable/geist-mono` | Clinical numbers, codes, citations |
+| Geist Mono Variable | `@fontsource-variable/geist-mono` | Clinical numbers, codes, citations, `kicker` labels (Latin) |
+
+`.kicker` (`index.css`) is the micro-label used instead of chips: mono caps with wide tracking for Latin, and under `:lang(ko)` Pretendard bold with tight tracking (Geist Mono has no Hangul).
 
 Legacy utility classes (`typo-page-title`, `typo-section-header`, `typo-body`, `typo-label`, `typo-drug-name`, `typo-score`) remain for the report components. `tnum` enables tabular figures. Korean text uses `word-break: keep-all`.
 
@@ -435,8 +402,8 @@ CSS `@media print` styles for clinical report output:
 - **Vite 5** for build tooling
 - **Tailwind CSS 3** for styling (no component library)
 - **React Router v7** for client-side routing
-- **Lucide React** for icons
-- **Self-hosted fonts** — Pretendard, Instrument Serif, Geist Mono (npm packages)
+- **No icon library** — typography, hairlines and the → glyph only
+- **Self-hosted fonts** — Pretendard, Geist Mono (npm packages)
 - **Route-level code splitting** — `React.lazy` per page with a branded fallback
 - **Formspree** for lead capture form submission
 - **Vercel** for deployment (SPA rewrites configured)
@@ -481,7 +448,7 @@ All backend requests go through `apiFetch()`, which:
 
 ```
 src/
-├── App.jsx                          # Router (lazy routes): /, /demo, /system, /patients
+├── App.jsx                          # Router (lazy routes): /, /demo, /system, /patients; route-aware loading screen
 ├── main.jsx                         # Font imports + root render
 ├── index.css                        # Tokens (spring easing), surfaces, island motion, reduced motion
 │
@@ -511,17 +478,18 @@ src/
 │   ├── ResultsDisplay.jsx           # DUR report (embedded mode, context checks)
 │   ├── DrugInput.jsx                # Workspace drug search (backend → local fallback)
 │   ├── OrganLoadIndicator.jsx       # Renal/hepatic burden (exports getOrganLoads / getRenalRisk)
-│   ├── AnalysisScreen.jsx           # Loading animation (6 steps)
+│   ├── AnalysisScreen.jsx           # Scan readout (6 ruled steps, status words)
 │   ├── ConfidenceProvenance.jsx     # Confidence score + source breakdown
 │   ├── DrugTimeline.jsx             # SVG pharmacokinetic timeline
 │   ├── ScanExportPDF.jsx            # Printable scan export
-│   ├── SeverityBadge.jsx
+│   ├── SeverityBadge.jsx            # Severity vocabulary + the severity word
+│   ├── Layout/Header.jsx            # WorkspaceHeader, FormularyStatus (/system, /patients)
 │   ├── EMRImportModal.jsx           # Screenshot → patient import (workspace)
 │   ├── MolecularBackground.jsx      # Animated SVG background (analysis screen)
 │   └── RequestAccessModal.jsx       # Access request / Claims waitlist (product-aware)
 │
 ├── data/
-│   ├── drugDatabase.js              # 28 curated drugs (demo + fallback)
+│   ├── drugDatabase.js              # 26 curated drugs (demo + fallback)
 │   ├── breedProfiles.js             # 7 demo patients with EMR detail + scenarios
 │   ├── emrCatalog.js                # EMR product names, prices, line maths
 │   ├── patientPhotos.js             # Unsplash patient photos + credits
@@ -533,6 +501,8 @@ src/
 │
 ├── lib/
 │   ├── api.js                       # Async API client for FastAPI backend
+│   ├── commonDrugs.ts               # Search ranking boost for common Korean clinic drugs
+│   ├── usePageCanvas.js             # Per-route page background + theme-color
 │   └── patientStorage.ts            # localStorage patient profiles
 │
 └── i18n/
