@@ -1,741 +1,689 @@
-import React, { useState, useEffect } from 'react';
-import {
-  AlertTriangle, AlertCircle, Info, CheckCircle, ChevronDown, ChevronUp,
-  BookOpen, FlaskConical, Globe, HelpCircle, Dna, ArrowLeft,
-  Check, Lightbulb, FileText, Clock, Pill, Flag, Printer, Download,
-  Mail, Send, Save
-} from 'lucide-react';
-import { SeverityBadge } from './SeverityBadge';
-import { DRUG_SOURCE } from '../data/drugDatabase';
+import React, { useState, useEffect, useId, useRef } from 'react';
+import { SeverityBadge, severityKey, severityTone, severityWord, SEVERITY_TONE } from './SeverityBadge';
 import { DrugTimeline } from './DrugTimeline';
-import { NuvovetLogo } from './NuvovetLogo';
+import { ProductLockup, BrandText } from './NuvovetLogo';
 import { OrganLoadIndicator } from './OrganLoadIndicator';
 import { ConfidenceProvenance } from './ConfidenceProvenance';
-import { ScanExportButton } from './ScanExportPDF';
+import { ScanExportButton, reportId } from './ScanExportPDF';
 import { useI18n } from '../i18n';
 
-// ── Overall Severity Banner ─────────────────────────────────────
-function SeverityBanner({ results, drugs = [] }) {
+// ──────────────────────────────────────────────────────────────────
+// nuvoDUR report
+//
+// Set like a lab report: a masthead, a verdict (overall severity as a
+// large coloured word with the counts beside it), then the findings as
+// ruled entries — each carries a short vertical rule in its severity
+// hue. Patient data, organ load and confidence sit in a quiet left
+// column on desktop and follow the findings on phones.
+//
+// Also rendered inside the /demo report sheet (`embedded`, with the
+// island's patient-context findings in `contextFindings`).
+// ──────────────────────────────────────────────────────────────────
+
+const fmt = (s, vars = {}) => String(s ?? '').replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
+const plural = (dict, key, n) => fmt((n === 1 && dict[`${key}1`]) || dict[key], { n });
+const pairsOf = (n) => (n * (n - 1)) / 2;
+const pad = (n) => String(n).padStart(2, '0');
+
+/** Korean dates stay numeric (2026.10.03 14:32) so they set cleanly in mono. */
+function formatStamp(iso, lang, withTime = true) {
+  const d = new Date(iso);
+  if (lang === 'ko') return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}${withTime ? ` ${pad(d.getHours())}:${pad(d.getMinutes())}` : ''}`;
+  return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}) });
+}
+
+/** "Canine" in English, "개" in Korean (the long Korean label repeats the Latin). */
+const speciesName = (t, lang, sp) => (sp === 'cat' ? (lang === 'ko' ? t.species.catShort : t.species.cat) : (lang === 'ko' ? t.species.dogShort : t.species.dog));
+
+// Patient-context findings (island) use lower-case severities
+const CONTEXT_SEVERITY = { critical: 'Critical', moderate: 'Moderate', minor: 'Minor', unknown: 'Unknown' };
+const CONTEXT_SCORE = { critical: 100, moderate: 50, unknown: 30, minor: 20 };
+
+// ── Shared bits ─────────────────────────────────────────────────
+
+function SeverityRule({ severity, className = '' }) {
+  return <span aria-hidden="true" className={`absolute left-0 w-[3px] ${severityTone(severity).rule} ${className}`} />;
+}
+
+function SectionHead({ id, label, count, aside }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-ink-900 pb-2.5">
+      <h3 id={id} className="kicker text-[11px] text-ink-900">
+        {label}
+        {count != null && <span className="ml-2 font-mono font-medium text-ink-400 tnum">{count}</span>}
+      </h3>
+      {aside}
+    </div>
+  );
+}
+
+function Kicker({ children, className = '' }) {
+  return <p className={`kicker text-[10.5px] text-ink-500 ${className}`}>{children}</p>;
+}
+
+// ── Masthead ────────────────────────────────────────────────────
+
+function Masthead({ results, patientInfo, species, embedded, onBack, titleRef }) {
+  const titleSize = embedded ? 'text-[24px] sm:text-[28px]' : 'text-[28px] sm:text-[34px]';
   const { t, lang } = useI18n();
-  const { interactions, drugFlags, confidenceScore, overallSeverity } = results;
-  const criticalCount = interactions.filter(i => i.severity.label === 'Critical').length;
-  const moderateCount = interactions.filter(i => i.severity.label === 'Moderate').length;
-  const minorCount = interactions.filter(i => i.severity.label === 'Minor' || i.severity.label === 'Unknown').length;
-
-  const isCritical = overallSeverity?.label === 'Critical';
-  const isModerate = overallSeverity?.label === 'Moderate';
-  const isClear = interactions.length === 0;
-
-  const bannerBg = isCritical
-    ? 'bg-red-50 border-red-300'
-    : isModerate
-    ? 'bg-amber-50 border-amber-300'
-    : isClear
-    ? 'bg-emerald-50 border-emerald-300'
-    : 'bg-yellow-50 border-yellow-200';
-
-  const iconColor = isCritical
-    ? 'text-red-500'
-    : isModerate
-    ? 'text-amber-500'
-    : isClear
-    ? 'text-emerald-500'
-    : 'text-yellow-500';
-
-  const SeverityIcon = isCritical ? AlertTriangle : isModerate ? AlertCircle : isClear ? CheckCircle : Info;
-
-  const confColor = confidenceScore >= 85 ? 'text-emerald-600' : confidenceScore >= 60 ? 'text-amber-600' : 'text-red-600';
+  const R = t.results;
+  const F = t.fullSystem;
+  const sp = patientInfo?.species || species;
+  const speciesShort = sp === 'cat' ? t.species.catShort : t.species.dogShort;
+  const sexLabel = {
+    'Intact Male': F.sexIntactMale,
+    'Intact Female': F.sexIntactFemale,
+    'Neutered Male': F.sexNeuteredMale,
+    'Spayed Female': F.sexSpayedFemale,
+  }[patientInfo?.sex];
+  const meta = [
+    sp ? speciesName(t, lang, sp) : null,
+    patientInfo?.breed,
+    patientInfo?.weight ? `${patientInfo.weight} kg` : null,
+    sexLabel,
+    patientInfo?.age ? fmt(R.ageValue, { n: patientInfo.age }) : null,
+  ].filter(Boolean);
+  const stamp = formatStamp(results.timestamp, lang);
 
   return (
-    <div className={`rounded-xl border-2 p-4 mb-5 animate-fade-in ${bannerBg}`}>
-      <div className="flex items-start gap-4">
-        <div className={`shrink-0 mt-0.5 ${iconColor}`}>
-          <SeverityIcon size={28} strokeWidth={2} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1.5">
-            <SeverityBadge severity={overallSeverity} size="lg" />
-            <span className="text-[13px] font-semibold text-slate-800">
-              {t.results.overallSeverity}
-            </span>
-          </div>
-          <div className="flex items-center flex-wrap gap-x-4 gap-y-1">
-            <span className="text-[13px] text-slate-600">
-              <span className="font-semibold text-slate-900">{drugFlags.length}</span>{' '}
-              {t.results.drugsScreenedInline}
-            </span>
-            <span className="text-slate-300">·</span>
-            <span className="text-[13px] text-slate-600">
-              <span className="font-semibold text-slate-900">{interactions.length}</span>{' '}
-              {t.results.interactionsInline}
-            </span>
-            {criticalCount > 0 && (
-              <>
-                <span className="text-slate-300">·</span>
-                <span className="text-[12px] font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
-                  {criticalCount} {t.results.critical}
-                </span>
-              </>
-            )}
-            {moderateCount > 0 && (
-              <>
-                <span className="text-slate-300">·</span>
-                <span className="text-[12px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                  {moderateCount} {t.results.moderate}
-                </span>
-              </>
-            )}
-            {minorCount > 0 && (
-              <>
-                <span className="text-slate-300">·</span>
-                <span className="text-[12px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {minorCount} {t.results.minor}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="shrink-0 text-right">
-          <div className={`text-2xl font-bold ${confColor}`}>{confidenceScore}%</div>
-          <div className="text-[10px] text-slate-400 uppercase tracking-wide">{t.results.confidence}</div>
-          <div className="mt-1 w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-700 ${confidenceScore >= 85 ? 'bg-emerald-500' : confidenceScore >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
-              style={{ width: `${confidenceScore}%` }}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Patient Summary Panel (left panel) ────────────────────────
-// NOTE: Severity breakdown (critical/moderate/minor counts) is shown only in
-// the SeverityBanner (main content area) to avoid duplication. This panel
-// shows patient info, drug count, interaction count, organ load, and confidence.
-function PatientSummaryPanel({ results, patientInfo, drugs = [], species = 'dog' }) {
-  const { t, lang } = useI18n();
-  const { interactions, drugFlags, confidenceScore } = results;
-
-  return (
-    <div className="space-y-3">
-      {patientInfo?.name && (
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <h3 className="typo-section-header mb-3">{t.results.patient}</h3>
-          <div className="space-y-1.5">
-            <div className="flex justify-between items-baseline gap-2">
-              <span className="typo-label shrink-0">{t.results.patient}</span>
-              <span className="typo-drug-name text-[13px] text-right truncate">{patientInfo.name}</span>
-            </div>
-            {patientInfo.species && (
-              <div className="flex justify-between items-baseline gap-2">
-                <span className="typo-label shrink-0">{t.results.species}</span>
-                <span className="text-[13px] font-medium text-slate-700 text-right">{patientInfo.species === 'dog' ? t.species.dog : t.species.cat}</span>
-              </div>
-            )}
-            {patientInfo.breed && (
-              <div className="flex justify-between items-baseline gap-2">
-                <span className="typo-label shrink-0">{t.results.breed}</span>
-                <span className="text-[13px] font-medium text-slate-700 text-right truncate">{patientInfo.breed}</span>
-              </div>
-            )}
-            {patientInfo.weight && (
-              <div className="flex justify-between items-baseline gap-2">
-                <span className="typo-label shrink-0">{t.results.weight}</span>
-                <span className="text-[13px] font-medium text-slate-700">{patientInfo.weight} kg</span>
-              </div>
-            )}
-          </div>
-          {patientInfo.conditions && patientInfo.conditions.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-slate-100">
-              <span className="typo-label block mb-1.5">{t.results.conditions}</span>
-              <div className="flex flex-wrap gap-1">
-                {patientInfo.conditions.map((c, i) => (
-                  <span key={i} className="text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-100">{c}</span>
-                ))}
-              </div>
-            </div>
-          )}
-          {patientInfo.flaggedLabs && patientInfo.flaggedLabs.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-slate-100">
-              <span className="typo-label block mb-1.5">{t.results.flaggedLabs}</span>
-              <div className="flex flex-wrap gap-1">
-                {patientInfo.flaggedLabs.map((lab, i) => (
-                  <span key={i} className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${lab.status === 'high' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
-                    {lab.key}: {lab.value} {lab.unit} {lab.status === 'high' ? '↑' : '↓'}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+    <header>
+      {!embedded && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="no-print -ml-1.5 mb-4 inline-flex h-10 items-center gap-2 rounded-md px-1.5 text-[13px] font-medium text-ink-500 transition-colors hover:text-ink-900"
+        >
+          <span aria-hidden="true">←</span> {R.backToMeds}
+        </button>
       )}
-
-      {/* Scan summary — drug count + interaction count only (severity breakdown is in the banner above) */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-        <h3 className="typo-section-header mb-3">{t.results.scanSummary}</h3>
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <span className="typo-label">{t.results.drugsScreened}</span>
-            <span className="typo-score font-semibold text-slate-900">{drugFlags.length}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="typo-label">{t.results.interactions}</span>
-            <span className="typo-score font-semibold text-slate-900">{interactions.length}</span>
-          </div>
+      <div className="mb-4 hidden print-show">
+        <ProductLockup product="dur" size="md" />
+      </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
+        <div className="min-w-0">
+          <p className="kicker text-[11px] text-ink-500">
+            {R.durReport} <span className="mx-1.5 text-ink-300" aria-hidden="true">/</span>
+            <span className="font-mono tracking-[0.06em]">{reportId(results)}</span>
+          </p>
+          <h2 ref={titleRef} tabIndex={-1} className={`mt-2 text-balance font-bold leading-[1.1] tracking-[-0.03em] text-ink-900 focus:outline-none ${titleSize}`}>
+            {patientInfo?.name || fmt(R.anonPatient, { species: speciesShort })}
+          </h2>
+          {meta.length > 0 && <p className="mt-2 text-[14px] text-ink-500">{meta.join(' · ')}</p>}
+        </div>
+        <div className="shrink-0 sm:text-right">
+          <Kicker>{R.generated}</Kicker>
+          <p className="mt-1 font-mono text-[12.5px] text-ink-700 tnum">{stamp}</p>
         </div>
       </div>
-
-      {/* Cumulative Organ Load — prominent, always expanded (core differentiator) */}
-      <OrganLoadIndicator drugs={drugs} patientInfo={patientInfo} species={species} />
-
-      {/* Confidence Provenance */}
-      <ConfidenceProvenance
-        confidenceScore={confidenceScore}
-        drugs={drugs}
-        species={species}
-      />
-    </div>
+    </header>
   );
 }
 
-function ClassChip({ label }) {
-  return <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{label}</span>;
-}
+// ── Verdict ─────────────────────────────────────────────────────
 
-// ── Why Dangerous Panel ──────────────────────────────────────────
-// Critical (severity 3): always fully visible — no toggle required.
-// Moderate (severity 2): toggleable.
-function WhyDangerousPanel({ interaction, t }) {
-  const severityLabel = interaction.severity?.label;
-  const isCritical = severityLabel === 'Critical';
-  // Critical is always open; Moderate starts collapsed
-  const [open, setOpen] = useState(isCritical);
-
-  if (isCritical) {
-    // Always-expanded — no toggle button
-    return (
-      <div className="px-4 pb-3 border-t border-slate-100/50 space-y-3">
-        <p className={`text-[11px] font-semibold flex items-center gap-1.5 text-red-600`}>
-          <AlertTriangle size={11} className="text-red-500" />
-          {t.results.whyDangerous}
-        </p>
-        <div className="bg-red-50/70 border border-red-200 rounded-lg px-3.5 py-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5 text-slate-500">
-            {t.results.mechanismSection}
-          </p>
-          <p className="text-[12px] text-slate-700 leading-relaxed">
-            {interaction.mechanism || <span className="text-slate-400 italic">기전 상세 정보를 현재 데이터베이스에서 확인할 수 없습니다. / Mechanism detail not available in current database.</span>}
-          </p>
-        </div>
-        <div className="flex items-start gap-2 bg-red-100 border border-red-300 rounded-lg px-3 py-2.5">
-          <AlertTriangle size={13} className="text-red-600 shrink-0 mt-0.5" />
-          <p className="text-[12px] font-semibold text-red-800">{t.results.actionContraindicated}</p>
-        </div>
-        {interaction.literatureSummary && (
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5 text-slate-500">
-              {t.results.clinicalSignificance}
-            </p>
-            <p className="text-[12px] text-slate-600 leading-relaxed bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-              {interaction.literatureSummary}
-            </p>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Moderate — toggleable
-  return (
-    <div className="px-4 pb-3 border-t border-slate-100/50">
-      <button
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
-        className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 hover:text-amber-800 transition-colors"
-      >
-        <AlertTriangle size={11} className="text-amber-500" />
-        {t.results.whyDangerous}
-        {open ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-      </button>
-      {open && (
-        <div className="mt-2.5 space-y-3 animate-fade-in">
-          <div className="bg-amber-50/50 border border-amber-200 rounded-lg px-3.5 py-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5 text-slate-500">
-              {t.results.mechanismSection}
-            </p>
-            <p className="text-[12px] text-slate-700 leading-relaxed">
-              {interaction.mechanism || <span className="text-slate-400 italic">기전 상세 정보를 현재 데이터베이스에서 확인할 수 없습니다. / Mechanism detail not available in current database.</span>}
-            </p>
-          </div>
-          {interaction.literatureSummary && (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5 text-slate-500">
-                {t.results.clinicalSignificance}
-              </p>
-              <p className="text-[12px] text-slate-600 leading-relaxed bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-                {interaction.literatureSummary}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Interaction Card ────────────────────────────────────────────
-function InteractionCard({ interaction, index, acknowledged, noted, onAcknowledge, onNote, isFullSystem, wasRefined }) {
+function Verdict({ results, contextFindings, refined }) {
   const { t } = useI18n();
-  const isMinor = interaction.severity?.label === 'Minor' || interaction.severity?.label === 'Unknown';
-  const isSignificant = interaction.severity?.label === 'Critical' || interaction.severity?.label === 'Moderate';
-  const [expanded, setExpanded] = useState(isMinor ? false : index === 0);
-  const [showLiterature, setShowLiterature] = useState(false);
-  const severityLabel = interaction.severity?.label;
+  const R = t.results;
+  const { interactions, drugFlags, confidenceScore, overallSeverity } = results;
 
-  const cardBg = () => {
-    if (severityLabel === 'Critical') return 'bg-red-50 border-red-200';
-    if (severityLabel === 'Moderate') return 'bg-amber-50/60 border-amber-200';
-    return 'bg-white border-slate-200';
+  const ctx = (sev) => contextFindings.filter((f) => f.severity === sev).length;
+  const counts = {
+    Critical: interactions.filter((i) => severityKey(i.severity) === 'Critical').length + ctx('critical'),
+    Moderate: interactions.filter((i) => severityKey(i.severity) === 'Moderate').length + ctx('moderate'),
+    Minor: interactions.filter((i) => ['Minor', 'Unknown'].includes(severityKey(i.severity))).length + ctx('minor') + ctx('unknown'),
   };
+  const isClear = interactions.length === 0 && contextFindings.length === 0;
+  const key = isClear ? 'None' : severityKey(overallSeverity);
+  const tone = SEVERITY_TONE[key];
+  const n = drugFlags.length;
 
-  const accentBorder = () => {
-    if (severityLabel === 'Critical') return 'border-l-[3px] border-l-red-500';
-    if (severityLabel === 'Moderate') return 'border-l-[3px] border-l-amber-400';
-    return '';
-  };
+  const coverage = [
+    plural(R.coverage, 'drugs', n),
+    plural(R.coverage, 'pairs', pairsOf(n)),
+    plural(R.coverage, 'interactions', interactions.length),
+    contextFindings.length ? plural(R.coverage, 'context', contextFindings.length) : null,
+  ].filter(Boolean);
 
-  if (isMinor && !expanded) {
-    return (
-      <button
-        onClick={() => setExpanded(true)}
-        className={`w-full flex items-center gap-2.5 px-4 py-2.5 rounded-lg border transition-all hover:shadow-sm ${cardBg()} ${acknowledged ? 'opacity-60' : ''} animate-stagger-fade-in`}
-        style={{ animationDelay: `${index * 50}ms` }}
-      >
-        <SeverityBadge severity={interaction.severity} />
-        <span className="typo-drug-name text-[13px] flex-1 text-left min-w-0 break-words">{interaction.drugA} + {interaction.drugB}</span>
-        {wasRefined && (
-          <span className="text-[9px] font-medium text-purple-600 bg-purple-50 border border-purple-100 px-1.5 py-0.5 rounded-full shrink-0">
-            {t.results.refinedAlert}
-          </span>
-        )}
-        <span className="text-[11px] text-slate-400 shrink-0 hidden sm:block">{interaction.rule}</span>
-        <ChevronDown size={12} className="text-slate-400 shrink-0" />
-      </button>
-    );
-  }
-
-  const recBoxBg = () => {
-    if (severityLabel === 'Critical') return 'bg-red-100/70 border-red-200';
-    if (severityLabel === 'Moderate') return 'bg-amber-100/50 border-amber-200';
-    return 'bg-blue-50 border-blue-100';
-  };
+  const confTone = confidenceScore >= 85 ? 'bg-emerald-500' : confidenceScore >= 60 ? 'bg-amber-500' : 'bg-red-500';
 
   return (
-    <div
-      className={`rounded-xl border overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md ${accentBorder()} ${cardBg()} ${acknowledged ? 'opacity-70' : ''} print-break-inside-avoid animate-stagger-fade-in`}
-      style={{ animationDelay: `${index * 50}ms` }}
-    >
-      {/* Zone 1: Header */}
-      <div className={`px-4 py-3.5 cursor-pointer ${severityLabel === 'Critical' ? 'bg-red-50' : severityLabel === 'Moderate' ? 'bg-amber-50/40' : 'bg-white'}`} onClick={() => setExpanded(!expanded)}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="typo-drug-name break-words">{interaction.drugA} + {interaction.drugB}</p>
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              {interaction.drugAClass && <ClassChip label={interaction.drugAClass} />}
-              <span className="text-slate-300 text-[10px]">+</span>
-              {interaction.drugBClass && <ClassChip label={interaction.drugBClass} />}
-              {wasRefined && (
-                <span className="text-[9px] font-medium text-purple-600 bg-purple-50 border border-purple-100 px-1.5 py-0.5 rounded-full">
-                  ✦ {t.results.refinedAlert}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <SeverityBadge severity={interaction.severity} />
-            {expanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
-          </div>
+    <section aria-labelledby="verdict-label" className="mt-7 border-y border-ink-200 py-6 sm:mt-8 lg:py-7">
+      <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:gap-14">
+        <div className="relative pl-5">
+          <span aria-hidden="true" className={`absolute inset-y-1 left-0 w-[3px] ${tone.rule}`} />
+          <p id="verdict-label" className="kicker text-[11px] text-ink-500">{R.overallSeverity}</p>
+          <p className={`mt-2.5 text-[44px] font-bold leading-[0.95] tracking-[-0.045em] sm:text-[56px] ${tone.display}`}>
+            {severityWord(t, key)}
+          </p>
+          <p className="mt-3 max-w-[52ch] text-pretty text-[15px] leading-relaxed text-ink-800">{R.verdict[tone.key]}</p>
+          <p className="mt-2 text-[13px] text-ink-500">{coverage.join(' · ')}</p>
+          {refined && <p className="kicker mt-3 text-[10.5px] text-dur-700">{R.refinedAlert}</p>}
         </div>
+
+        <dl className="grid grid-cols-4 border-t border-ink-100 pt-5 lg:border-0 lg:pt-0">
+          {['Critical', 'Moderate', 'Minor'].map((k) => (
+            <div key={k} className="border-r border-ink-100 pr-3 last:border-0 sm:pr-6 lg:pl-6 lg:first:pl-0">
+              <dt className={`kicker text-[10px] ${counts[k] ? SEVERITY_TONE[k].word : 'text-ink-400'}`}>{severityWord(t, k)}</dt>
+              <dd className={`mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tnum sm:text-[34px] ${counts[k] ? SEVERITY_TONE[k].display : 'text-ink-300'}`}>
+                {counts[k]}
+              </dd>
+            </div>
+          ))}
+          <div className="pl-3 sm:pl-6">
+            <dt className="kicker text-[10px] text-ink-400">{R.confidence}</dt>
+            <dd className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] text-ink-900 tnum sm:text-[34px]">
+              {confidenceScore}
+              <span className="text-[15px] font-medium text-ink-400">%</span>
+            </dd>
+            <span aria-hidden="true" className="relative mt-2.5 block h-[2px] w-full bg-ink-100">
+              <span className={`absolute inset-y-0 left-0 ${confTone}`} style={{ width: `${confidenceScore}%` }} />
+            </span>
+          </div>
+        </dl>
       </div>
+    </section>
+  );
+}
+
+// ── Patient ─────────────────────────────────────────────────────
+
+function PatientPanel({ patientInfo, species }) {
+  const { t, lang } = useI18n();
+  const R = t.results;
+  const F = t.fullSystem;
+  if (!patientInfo) return null;
+  const sp = patientInfo.species || species;
+  const sexLabel = {
+    'Intact Male': F.sexIntactMale,
+    'Intact Female': F.sexIntactFemale,
+    'Neutered Male': F.sexNeuteredMale,
+    'Spayed Female': F.sexSpayedFemale,
+  }[patientInfo.sex];
+  const labName = (k) => t.emr?.labs?.names?.[k] || (k ? k.charAt(0).toUpperCase() + k.slice(1) : k);
+
+  const rows = [
+    [R.patient, patientInfo.name],
+    [R.species, sp ? speciesName(t, lang, sp) : null],
+    [R.breed, patientInfo.breed],
+    [R.weight, patientInfo.weight ? <><span className="font-mono tnum">{patientInfo.weight}</span> kg</> : null],
+    [R.sex, sexLabel],
+    [R.age, patientInfo.age ? fmt(R.ageValue, { n: patientInfo.age }) : null],
+    [R.conditions, patientInfo.conditions?.length ? patientInfo.conditions.join(', ') : null],
+    [R.allergies, patientInfo.allergies?.length ? patientInfo.allergies.join(', ') : null],
+  ].filter(([, v]) => v);
+
+  const labs = patientInfo.flaggedLabs || [];
+
+  return (
+    <section aria-labelledby="pt-head">
+      <h3 id="pt-head" className="kicker border-b border-ink-900 pb-2.5 text-[11px] text-ink-900">{R.patientSummary}</h3>
+      <dl className="divide-y divide-ink-100">
+        {rows.map(([k, v]) => (
+          <div key={k} className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 py-2.5">
+            <dt className="text-[12.5px] text-ink-500">{k}</dt>
+            <dd className="text-[13.5px] font-medium text-ink-900">{v}</dd>
+          </div>
+        ))}
+        {labs.length > 0 && (
+          <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 py-2.5">
+            <dt className="text-[12.5px] text-ink-500">{R.flaggedLabs}</dt>
+            <dd className="space-y-1">
+              {labs.map((lab) => {
+                const tone = lab.status === 'high' ? 'text-red-700' : lab.status === 'low' ? 'text-amber-700' : 'text-ink-900';
+                return (
+                  <p key={lab.key} className="flex items-baseline justify-between gap-2 text-[13.5px]">
+                    <span className="font-medium text-ink-900">{labName(lab.key)}</span>
+                    <span className={`whitespace-nowrap font-mono text-[12.5px] tnum ${tone}`}>
+                      {lab.value} {lab.unit}
+                      {lab.status === 'high' ? ' ↑' : lab.status === 'low' ? ' ↓' : ''}
+                    </span>
+                  </p>
+                );
+              })}
+            </dd>
+          </div>
+        )}
+      </dl>
+    </section>
+  );
+}
+
+// ── Interaction entry ───────────────────────────────────────────
+
+function InteractionItem({ interaction, index, acknowledged, noted, onAcknowledge, onNote, isFullSystem }) {
+  const { t } = useI18n();
+  const R = t.results;
+  const key = severityKey(interaction.severity);
+  const isMinor = key === 'Minor' || key === 'Unknown';
+  const isCritical = key === 'Critical';
+  const isModerate = key === 'Moderate';
+  const [expanded, setExpanded] = useState(isMinor ? false : index === 0);
+  const [showWhy, setShowWhy] = useState(false);
+  const [showLiterature, setShowLiterature] = useState(false);
+  const uid = useId();
+  const done = acknowledged || noted;
+  const refs = interaction.literature || [];
+
+  return (
+    <li className="print-break-inside-avoid relative border-b border-ink-200">
+      <SeverityRule severity={interaction.severity} className={`top-4 ${expanded ? 'bottom-6' : 'bottom-4'} ${done ? 'opacity-35' : ''}`} />
+
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        aria-controls={`${uid}-body`}
+        className="group grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 py-4 pl-5 pr-0.5 text-left"
+      >
+        <span className="min-w-0">
+          <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <SeverityBadge severity={interaction.severity} />
+            {interaction.rule && <span className="font-mono text-[11px] text-ink-400">{interaction.rule}</span>}
+            {done && <span className="kicker text-[10.5px] text-emerald-700">{acknowledged ? R.reviewed : R.noted}</span>}
+          </span>
+          <span className={`mt-1.5 block break-words text-[17px] font-semibold leading-snug tracking-[-0.015em] ${done ? 'text-ink-500' : 'text-ink-900'}`}>
+            {interaction.drugA} <span className="font-normal text-ink-400">+</span> {interaction.drugB}
+          </span>
+          {(interaction.drugAClass || interaction.drugBClass) && (
+            <span className="mt-0.5 block font-mono text-[11.5px] text-ink-500">
+              {[interaction.drugAClass, interaction.drugBClass].filter(Boolean).join(' + ')}
+            </span>
+          )}
+        </span>
+        <span className="no-print kicker mt-0.5 whitespace-nowrap text-[10.5px] text-ink-400 transition-colors group-hover:text-ink-900">
+          {expanded ? R.collapse : R.expand}
+        </span>
+      </button>
 
       {expanded && (
-        <div className="animate-fade-in">
-          {/* Zone 2: Mechanism */}
-          <div className="px-4 py-3 bg-white border-t border-slate-100/50">
-            <h4 className="typo-section-header text-[11px] mb-1.5">{t.results.whatHappens.toUpperCase()}</h4>
-            <p className="typo-body leading-relaxed">{interaction.mechanism}</p>
-          </div>
+        <div id={`${uid}-body`} className="animate-fade-in pb-7 pl-5">
+          <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
+            <div className="space-y-6">
+              <div>
+                <Kicker>{R.whatHappens}</Kicker>
+                <p className="mt-2 text-[14px] leading-relaxed text-ink-700">
+                  {interaction.mechanism || <span className="text-ink-400">{R.mechanismUnavailable}</span>}
+                </p>
+              </div>
 
-          {/* "Why is this dangerous?" — severity Moderate + Critical only */}
-          {isSignificant && (
-            <WhyDangerousPanel interaction={interaction} t={t} />
-          )}
-
-          {/* PK Timeline */}
-          {interaction.drugAData && interaction.drugBData && (
-            <div className="px-4 py-2 bg-white border-t border-slate-100/50">
-              <DrugTimeline drugA={interaction.drugAData} drugB={interaction.drugBData} />
-            </div>
-          )}
-
-          {/* Zone 3: Recommendation */}
-          <div className="px-4 py-3 border-t border-slate-100/50">
-            <div className={`rounded-lg border px-3.5 py-3 ${recBoxBg()}`}>
-              <h4 className="typo-section-header text-[11px] mb-1.5">{t.results.recommendedAction.toUpperCase()}</h4>
-              <p className="typo-rec text-slate-800 leading-relaxed">{interaction.recommendation}</p>
-
-              {interaction.alternativeSuggestion && severityLabel === 'Critical' && (
-                <div className="mt-3 pt-2.5 border-t border-slate-200/50">
-                  <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2.5">
-                    <Lightbulb size={13} className="text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider mb-0.5">{t.results.alternativeSuggestion}</p>
-                      <p className="text-[13px] text-emerald-800 font-medium leading-relaxed">{interaction.alternativeSuggestion}</p>
+              {/* Why is this dangerous? — always open for Critical, a toggle for Moderate */}
+              {(isCritical || (isModerate && interaction.literatureSummary)) && (
+                <div>
+                  {isCritical ? (
+                    <Kicker className="!text-red-700">{R.whyDangerous}</Kicker>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowWhy((v) => !v)}
+                      aria-expanded={showWhy}
+                      aria-controls={`${uid}-why`}
+                      className="-ml-1 inline-flex h-10 items-center rounded-md px-1 text-[13px] font-semibold text-amber-700 underline decoration-amber-300 underline-offset-[5px] transition-colors hover:text-amber-800"
+                    >
+                      {R.whyDangerous}
+                    </button>
+                  )}
+                  {(isCritical || showWhy) && (
+                    <div id={`${uid}-why`} className={isCritical ? 'mt-2' : 'mt-1 animate-fade-in'}>
+                      {interaction.literatureSummary && (
+                        <p className="text-[14px] leading-relaxed text-ink-700">{interaction.literatureSummary}</p>
+                      )}
                     </div>
-                  </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-5">
+              <div>
+                <Kicker>{R.recommendedAction}</Kicker>
+                <p className="mt-2 text-[15px] font-medium leading-relaxed text-ink-900">{interaction.recommendation}</p>
+              </div>
+              {isCritical && (
+                <p className="relative pl-3.5 text-[13.5px] font-semibold leading-relaxed text-red-700">
+                  <span aria-hidden="true" className="absolute inset-y-0.5 left-0 w-[2px] bg-red-500" />
+                  {R.actionContraindicated}
+                </p>
+              )}
+              {isCritical && interaction.alternativeSuggestion && (
+                <div className="relative pl-3.5">
+                  <span aria-hidden="true" className="absolute inset-y-0.5 left-0 w-[2px] bg-emerald-500" />
+                  <Kicker className="!text-emerald-700">{R.alternativeSuggestion}</Kicker>
+                  <p className="mt-1.5 text-[14px] leading-relaxed text-ink-800">{interaction.alternativeSuggestion}</p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Literature — per-interaction evidence only, no shared static list */}
-          <div className="px-4 pb-3">
+          {interaction.drugAData && interaction.drugBData && (
+            <div className="mt-7 border-t border-ink-100 pt-5">
+              <DrugTimeline drugA={interaction.drugAData} drugB={interaction.drugBData} />
+            </div>
+          )}
+
+          {/* Evidence */}
+          <div className={`mt-5 border-t border-ink-100 pt-3 ${showLiterature ? '' : 'no-print'}`}>
             <button
-              onClick={(e) => { e.stopPropagation(); setShowLiterature(!showLiterature); }}
-              className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+              type="button"
+              onClick={() => setShowLiterature((v) => !v)}
+              aria-expanded={showLiterature}
+              aria-controls={`${uid}-refs`}
+              className="-ml-1 inline-flex h-10 items-center gap-2 rounded-md px-1 text-[13px] font-medium text-ink-600 transition-colors hover:text-ink-900"
             >
-              <BookOpen size={11} />
-              {t.results.evidenceRefs}
-              {showLiterature ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+              {showLiterature ? R.hideEvidence : R.showEvidence}
+              <span className="font-mono text-[11.5px] text-ink-400 tnum">{refs.length}</span>
             </button>
             {showLiterature && (
-              <div className="mt-2 space-y-2 animate-fade-in">
-                {interaction.literatureSummary ? (
-                  <p className="typo-body bg-slate-50/80 px-3 py-2 rounded-lg border border-slate-100">{interaction.literatureSummary}</p>
-                ) : null}
-                {(interaction.literature || []).length > 0 ? (
-                  interaction.literature.map((ref, i) => (
-                    <div key={i} className="text-[11px] text-slate-500 px-2.5 py-1.5 bg-slate-50 rounded">
-                      <p className="font-medium text-slate-600">{ref.title}</p>
-                      <p className="typo-label">{ref.source}</p>
-                    </div>
-                  ))
+              <div id={`${uid}-refs`} className="mt-1 animate-fade-in">
+                {!isCritical && !isModerate && interaction.literatureSummary && (
+                  <p className="mb-3 text-[13.5px] leading-relaxed text-ink-700">{interaction.literatureSummary}</p>
+                )}
+                {refs.length > 0 ? (
+                  <ol className="divide-y divide-ink-100 border-y border-ink-100">
+                    {refs.map((ref, i) => (
+                      <li key={i} className="grid grid-cols-[24px_minmax(0,1fr)] gap-2 py-2.5">
+                        <span className="font-mono text-[11px] text-ink-400 tnum">{String(i + 1).padStart(2, '0')}</span>
+                        <span>
+                          <span className="block text-[13px] font-medium text-ink-800">{ref.title}</span>
+                          <span className="mt-0.5 block font-mono text-[11.5px] text-ink-500">{ref.source}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
                 ) : (
-                  !interaction.literatureSummary && (
-                    <p className="text-[11px] text-slate-400 italic px-1">{t.results.sourceNotAvailable}</p>
-                  )
+                  !interaction.literatureSummary && <p className="text-[13px] text-ink-400">{R.sourceNotAvailable}</p>
                 )}
               </div>
             )}
           </div>
 
-          {/* Acknowledgment row — Full System only */}
+          {/* Acknowledgement — clinic workspace only */}
           {isFullSystem && (
-            <div className="px-4 pb-3 flex items-center gap-2 flex-wrap">
+            <div className="no-print mt-3 flex flex-wrap items-center gap-2 border-t border-ink-100 pt-4">
               <button
-                onClick={(e) => { e.stopPropagation(); onAcknowledge(); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${acknowledged ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-300'}`}
+                type="button"
+                onClick={onAcknowledge}
+                aria-pressed={acknowledged}
+                className={`h-10 rounded-md px-4 text-[13px] font-semibold transition-colors ${
+                  acknowledged ? 'bg-ink-900 text-white hover:bg-ink-800' : 'text-ink-800 ring-1 ring-inset ring-ink-200 hover:bg-ink-50 hover:ring-ink-300'
+                }`}
               >
-                <Check size={12} className={acknowledged ? 'text-emerald-600' : 'text-slate-400'} />
-                {t.results.reviewed}
+                {R.reviewed}
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); onNote(); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${noted ? 'bg-slate-100 text-slate-600 border border-slate-300' : 'bg-white text-slate-400 border border-slate-200 hover:border-slate-300'}`}
+                type="button"
+                onClick={onNote}
+                aria-pressed={noted}
+                className={`h-10 rounded-md px-4 text-[13px] font-semibold transition-colors ${
+                  noted ? 'bg-ink-900 text-white hover:bg-ink-800' : 'text-ink-800 ring-1 ring-inset ring-ink-200 hover:bg-ink-50 hover:ring-ink-300'
+                }`}
               >
-                <Flag size={10} />
-                {t.results.noted}
+                {R.noted}
               </button>
-              <span className="text-[10px] text-slate-400 ml-auto italic">{t.results.clinicalJudgment}</span>
+              <p className="w-full text-[12px] text-ink-400 sm:ml-auto sm:w-auto">{R.clinicalJudgment}</p>
             </div>
           )}
         </div>
       )}
-    </div>
+    </li>
   );
 }
 
-// ── Drug Flag Card ──────────────────────────────────────────────
-function DrugFlagCard({ drugFlag, species }) {
-  const [expanded, setExpanded] = useState(false);
-  if (drugFlag.flags.length === 0 && !drugFlag.speciesNote) return null;
+// ── Patient-context finding (allergy, drug–disease, dose, species, organ) ──
 
-  const sourceIcon = () => {
-    if (drugFlag.source === DRUG_SOURCE.HUMAN_OFFLABEL) return <FlaskConical size={13} className="text-amber-500" />;
-    if (drugFlag.source === DRUG_SOURCE.FOREIGN) return <Globe size={13} className="text-blue-500" />;
-    if (drugFlag.source === DRUG_SOURCE.UNKNOWN) return <HelpCircle size={13} className="text-slate-400" />;
-    return <Pill size={13} className="text-emerald-500" />;
-  };
-
+function ContextItem({ finding: f }) {
+  const { t, lang } = useI18n();
+  const R = t.results;
+  const sev = { label: CONTEXT_SEVERITY[f.severity] || 'Unknown' };
   return (
-    <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 shadow-sm hover:shadow-md transition-shadow">
-      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center gap-2.5 text-left">
-        {sourceIcon()}
-        <span className="text-[13px] font-medium text-slate-800 flex-1 min-w-0 truncate">{drugFlag.drugName}</span>
-        {drugFlag.hasSpeciesWarning && (
-          <span className={`text-[11px] px-1.5 py-0.5 rounded-full border shrink-0 ${species === 'dog' ? 'border-amber-300 bg-amber-50 text-amber-600' : 'border-violet-300 bg-violet-50 text-violet-600'}`}>
-            {species === 'dog' ? '🐕' : '🐈'}
-          </span>
-        )}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {drugFlag.flags.map((f, i) => (
-            <span key={i} className={`text-[10px] px-1.5 py-0.5 rounded ${f.type === 'off-label' ? 'bg-amber-50 text-amber-600' : f.type === 'foreign' ? 'bg-blue-50 text-blue-600' : f.type === 'mdr1' || f.type === 'nti' ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
-              {f.label}
-            </span>
-          ))}
-          {expanded ? <ChevronUp size={12} className="text-slate-400" /> : <ChevronDown size={12} className="text-slate-400" />}
-        </div>
-      </button>
-      {expanded && (
-        <div className="mt-3 space-y-2 animate-fade-in">
-          {drugFlag.flags.map((f, i) => <p key={i} className="typo-body">{f.description}</p>)}
-          {drugFlag.speciesNote && (
-            <div className="flex items-start gap-1.5 typo-body bg-slate-50 px-2.5 py-2 rounded">
-              <Dna size={11} className="text-slate-400 mt-0.5 shrink-0" />
-              <p>{drugFlag.speciesNote}</p>
-            </div>
-          )}
-        </div>
+    <li className="print-break-inside-avoid relative border-b border-ink-200 py-4 pl-5">
+      <SeverityRule severity={sev} className={`inset-y-4 ${f.reviewed ? 'opacity-35' : ''}`} />
+      <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <SeverityBadge severity={sev} />
+        {f.kindLabel && <span className="kicker text-[10.5px] text-ink-400">{f.kindLabel}</span>}
+        {f.reviewed && <span className="kicker text-[10.5px] text-emerald-700">{R.reviewed}</span>}
+      </p>
+      <p className={`mt-1.5 text-[16px] font-semibold leading-snug tracking-[-0.01em] ${f.reviewed ? 'text-ink-500' : 'text-ink-900'}`}>{f.title}</p>
+      {f.drugsLabel && <p className={`mt-0.5 text-[12px] text-ink-500 ${lang === 'ko' ? '' : 'font-mono'}`}>{f.drugsLabel}</p>}
+      {f.summary && <p className="mt-2 max-w-[68ch] text-[14px] leading-relaxed text-ink-700">{f.summary}</p>}
+      {f.suggestion && (
+        <p className="mt-2.5 max-w-[68ch] text-[14px] font-medium leading-relaxed text-ink-900">
+          <span className="kicker mr-2 text-[10.5px] text-ink-500">{R.suggestedFix}</span>
+          {f.suggestion}
+        </p>
       )}
-    </div>
+    </li>
   );
 }
 
-// ── Action Bar (always visible at bottom of results) ────────────
-function ResultsActionBar({ results, patientInfo, drugs, species, lang, t }) {
-  const { drugFlags, interactions } = results;
+// ── Drug advisories (source, MDR1, NTI, species notes) ─────────────
 
-  const handleEmailPrint = () => {
-    // Open print dialog — doctor can print-to-PDF and email
-    window.print();
-  };
+const FLAG_TONE = {
+  mdr1: 'text-red-700',
+  nti: 'text-red-700',
+  'species-warning': 'text-red-700',
+  'off-label': 'text-amber-700',
+  unknown: 'text-amber-700',
+  foreign: 'text-ink-600',
+};
 
+function Advisories({ flaggedDrugs }) {
+  const { t } = useI18n();
+  const R = t.results;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm no-print">
-      <div className="flex items-center gap-2 mb-3">
-        <CheckCircle size={15} className="text-emerald-500 shrink-0" />
-        <span className="text-[13px] font-semibold text-slate-700">
-          {t.results.scanComplete}
-        </span>
-        <span className="text-[12px] text-slate-400 ml-auto">
-          {new Date().toLocaleDateString(lang === 'ko' ? 'ko-KR' : 'en-US')}
-          {' · '}{drugFlags.length} {t.results.drugCountLabel}
-          {' · '}{interactions.length} {t.results.interactionsFound}
-        </span>
-      </div>
-      <div className="flex flex-col sm:flex-row gap-2">
-        <button
-          onClick={handleEmailPrint}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-slate-700 text-[13px] font-medium rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all"
-        >
-          <Printer size={14} />
-          {t.results.exportSummary}
-        </button>
-        <div className="flex-1 flex">
-          <ScanExportButton
-            results={results}
-            patientInfo={patientInfo}
-            drugs={drugs}
-            species={species}
-          />
-        </div>
-        <button
-          onClick={() => {
-            const subject = encodeURIComponent(
-              lang === 'ko'
-                ? `NUVOVET DUR 보고서 — ${patientInfo?.name || '환자'}`
-                : `NUVOVET DUR Report — ${patientInfo?.name || 'Patient'}`
-            );
-            const body = encodeURIComponent(
-              lang === 'ko'
-                ? `DUR 분석 보고서\n\n환자: ${patientInfo?.name || '—'}\n날짜: ${new Date().toLocaleDateString('ko-KR')}\n검사 약물 수: ${drugFlags.length}\n발견된 상호작용: ${interactions.length}\n\n상세 내용은 전체 보고서를 출력하여 확인해 주세요.`
-                : `DUR Analysis Report\n\nPatient: ${patientInfo?.name || '—'}\nDate: ${new Date().toLocaleDateString()}\nDrugs screened: ${drugFlags.length}\nInteractions found: ${interactions.length}\n\nPlease print the full report for details.`
-            );
-            window.location.href = `mailto:?subject=${subject}&body=${body}`;
-          }}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-[13px] font-medium rounded-lg hover:bg-slate-800 transition-all"
-        >
-          <Mail size={14} />
-          {t.results.sendViaEmail}
-        </button>
-      </div>
-    </div>
+    <section aria-labelledby="adv-head">
+      <SectionHead id="adv-head" label={R.drugAdvisory} count={flaggedDrugs.length} />
+      <ul>
+        {flaggedDrugs.map((df) => (
+          <li key={df.drugId || df.drugName} className="grid gap-x-8 gap-y-2 border-b border-ink-100 py-4 sm:grid-cols-[200px_minmax(0,1fr)]">
+            <div>
+              <p className="text-[14.5px] font-semibold text-ink-900">{df.drugName}</p>
+              {df.drugClass && <p className="mt-0.5 font-mono text-[11.5px] text-ink-500">{df.drugClass}</p>}
+            </div>
+            <div className="space-y-2">
+              {df.flags.map((f, i) => (
+                <p key={i} className="text-[13.5px] leading-relaxed text-ink-700">
+                  <span className={`kicker mr-2 text-[10px] ${FLAG_TONE[f.type] || 'text-ink-500'}`}>{f.label}</span>
+                  {f.description}
+                </p>
+              ))}
+              {df.speciesNote && (
+                <p className="text-[13.5px] leading-relaxed text-ink-700">
+                  <span className="kicker mr-2 text-[10px] text-ink-500">{R.speciesNote}</span>
+                  {df.speciesNote}
+                </p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
 // ── Main Results Display ────────────────────────────────────────
-export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, isFullSystem = false, drugs = [], species = 'dog', onUpdatePatientRecord }) {
+
+export function ResultsDisplay({ results, onBack, onNewAnalysis, patientInfo, isFullSystem = false, drugs = [], species = 'dog', onUpdatePatientRecord, embedded = false, contextFindings = [] }) {
   const { t, lang } = useI18n();
-  if (!results) return null;
+  const R = t.results;
 
-  const { interactions, drugFlags, speciesNotes } = results;
-  const hasInteractions = interactions.length > 0;
-  const flaggedDrugs = drugFlags.filter(f => f.flags.length > 0 || f.speciesNote);
-
+  // Hooks run unconditionally (rules of hooks) — the empty-state return comes after.
   const [acknowledged, setAcknowledged] = useState({});
   const [noted, setNoted] = useState({});
-  const acknowledgedCount = Object.values(acknowledged).filter(Boolean).length;
-  const notedCount = Object.values(noted).filter(Boolean).length;
-  const allReviewed = interactions.length > 0 && (acknowledgedCount + notedCount) >= interactions.length;
   const [showScanBar, setShowScanBar] = useState(false);
+  const titleRef = useRef(null);
+  const interactionCount = results?.interactions?.length || 0;
+  const reviewedCount = Array.from({ length: interactionCount }, (_, i) => acknowledged[i] || noted[i]).filter(Boolean).length;
+  const allReviewed = interactionCount > 0 && reviewedCount >= interactionCount;
 
   useEffect(() => {
-    if (allReviewed) {
+    if (allReviewed && !embedded) {
       const timer = setTimeout(() => setShowScanBar(true), 300);
       return () => clearTimeout(timer);
-    } else {
-      setShowScanBar(false);
     }
-  }, [allReviewed]);
+    setShowScanBar(false);
+    return undefined;
+  }, [allReviewed, embedded]);
+
+  // Clinic workspace: land keyboard / screen-reader focus on the report
+  useEffect(() => {
+    if (!embedded) titleRef.current?.focus({ preventScroll: true });
+  }, [embedded]);
+
+  if (!results) return null;
+
+  const { interactions, drugFlags } = results;
+  const ctxScore = contextFindings.reduce((m, f) => Math.max(m, CONTEXT_SCORE[f.severity] || 0), 0);
+  const verdictResults = ctxScore > (results.overallSeverity?.score || 0)
+    ? { ...results, overallSeverity: { label: CONTEXT_SEVERITY[contextFindings.find((f) => CONTEXT_SCORE[f.severity] === ctxScore)?.severity] || 'Unknown', score: ctxScore } }
+    : results;
+  const flaggedDrugs = drugFlags.filter((f) => f.flags.length > 0 || f.speciesNote);
+  const dateStr = formatStamp(results.timestamp, lang, false);
+  const mono = lang === 'ko' ? '' : 'font-mono'; // Geist Mono has no Hangul
+
+  const sendEmail = () => {
+    const name = patientInfo?.name || (lang === 'ko' ? '환자' : 'Patient');
+    const subject = encodeURIComponent(`${lang === 'ko' ? 'nuvoDUR 보고서' : 'nuvoDUR report'} — ${name} (${reportId(results)})`);
+    const body = encodeURIComponent(
+      lang === 'ko'
+        ? `nuvoDUR 분석 보고서 ${reportId(results)}\n\n환자: ${patientInfo?.name || '—'}\n날짜: ${dateStr}\n검사 약물 수: ${drugFlags.length}\n발견된 상호작용: ${interactions.length}\n\n상세 내용은 첨부한 PDF 보고서를 확인해 주세요.`
+        : `nuvoDUR analysis report ${reportId(results)}\n\nPatient: ${patientInfo?.name || '—'}\nDate: ${dateStr}\nDrugs screened: ${drugFlags.length}\nInteractions found: ${interactions.length}\n\nPlease see the attached PDF report for details.`,
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
+  // Organ load + confidence: a left column on desktop, after the findings on phones
+  const analytics = (
+    <>
+      <OrganLoadIndicator drugs={drugs} patientInfo={patientInfo} species={species} />
+      <ConfidenceProvenance confidenceScore={results.confidenceScore} drugs={drugs} species={species} />
+    </>
+  );
+
+  const btnSecondary = 'inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-white px-4 text-[13.5px] font-semibold text-ink-900 ring-1 ring-inset ring-ink-200 transition-colors hover:bg-ink-50 hover:ring-ink-300';
+  const btnPrimary = 'inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink-900 px-5 text-[13.5px] font-semibold text-white transition-colors hover:bg-ink-800';
 
   return (
     <>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 animate-fade-in">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-5 no-print">
-          <button onClick={onBack} className="p-2 -ml-2 text-slate-400 hover:text-slate-600 transition-colors shrink-0">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="min-w-0">
-            <h2 className="typo-page-title">{t.results.durReport}</h2>
-            <p className="typo-label mt-0.5">
-              {new Date(results.timestamp).toLocaleString(lang === 'ko' ? 'ko-KR' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-            </p>
-          </div>
-        </div>
+      <div className={`mx-auto max-w-[1280px] animate-fade-in px-4 sm:px-6 lg:px-8 ${embedded ? 'py-6 sm:py-8' : 'pb-16 pt-6 sm:pt-8'} ${showScanBar ? 'pb-28' : ''}`}>
+        <Masthead results={results} patientInfo={patientInfo} species={species} embedded={embedded} onBack={onBack} titleRef={titleRef} />
+        <Verdict results={verdictResults} contextFindings={contextFindings} refined={!!results.wasRefined} />
 
-        {/* Print header */}
-        <div className="hidden print-show mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="typo-drug-name">{patientInfo?.name}</p>
-              <p className="typo-label">{new Date(results.timestamp).toLocaleDateString()}</p>
-            </div>
-            <NuvovetLogo size={32} className="text-slate-900" />
-          </div>
-        </div>
-
-        {/* Two-panel layout */}
-        <div className="flex flex-col lg:flex-row gap-5">
-          {/* Left sidebar — patient summary */}
-          <div className="w-full lg:w-72 xl:w-80 lg:shrink-0">
-            <div className="lg:sticky lg:top-20">
-              <PatientSummaryPanel results={results} patientInfo={patientInfo} drugs={drugs} species={species} />
-            </div>
+        <div className="mt-10 grid grid-cols-1 gap-x-12 gap-y-12 lg:grid-cols-[288px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:[grid-template-areas:'patient_main'_'aside_main'] xl:grid-cols-[312px_minmax(0,1fr)]">
+          {/* Patient — first on every screen */}
+          <div className="lg:[grid-area:patient]">
+            <PatientPanel patientInfo={patientInfo} species={species} />
           </div>
 
-          {/* Right main content */}
-          <div className="flex-1 min-w-0 space-y-5">
-            {/* Prominent severity banner */}
-            <SeverityBanner results={results} drugs={drugs} />
+          {/* Findings */}
+          <div className="min-w-0 space-y-12 lg:[grid-area:main]">
+            {contextFindings.length > 0 && (
+              <section aria-labelledby="ctx-head">
+                <SectionHead id="ctx-head" label={R.contextChecks} count={contextFindings.length} />
+                <ul>{contextFindings.map((f) => <ContextItem key={f.id} finding={f} />)}</ul>
+              </section>
+            )}
 
-            {hasInteractions ? (
-              <div>
-                <h3 className="typo-section-header mb-3">{t.results.interactionReport}</h3>
-                <div className="space-y-3">
+            <section aria-labelledby="ix-head">
+              <SectionHead
+                id="ix-head"
+                label={R.interactionReport}
+                count={interactions.length}
+                aside={isFullSystem && interactions.length > 0 && (
+                  <span className={`text-[11.5px] tnum ${mono} ${allReviewed ? 'text-emerald-700' : 'text-ink-400'}`}>
+                    {fmt(R.reviewProgress, { n: reviewedCount, total: interactions.length })}
+                  </span>
+                )}
+              />
+              {interactions.length > 0 ? (
+                <ul>
                   {interactions.map((interaction, i) => (
-                    <InteractionCard
-                      key={i}
+                    <InteractionItem
+                      key={`${interaction.drugA}-${interaction.drugB}-${interaction.rule}`}
                       interaction={interaction}
                       index={i}
                       acknowledged={!!acknowledged[i]}
                       noted={!!noted[i]}
-                      onAcknowledge={() => setAcknowledged(prev => ({ ...prev, [i]: !prev[i] }))}
-                      onNote={() => setNoted(prev => ({ ...prev, [i]: !prev[i] }))}
+                      onAcknowledge={() => setAcknowledged((prev) => ({ ...prev, [i]: !prev[i] }))}
+                      onNote={() => setNoted((prev) => ({ ...prev, [i]: !prev[i] }))}
                       isFullSystem={isFullSystem}
-                      wasRefined={!!results.wasRefined}
                     />
                   ))}
+                </ul>
+              ) : (
+                <div className="relative border-b border-ink-200 py-5 pl-5">
+                  <SeverityRule severity="None" className="inset-y-5" />
+                  <p className="kicker text-[10.5px] text-emerald-700">{severityWord(t, 'None')}</p>
+                  <p className="mt-1.5 text-[16px] font-semibold text-ink-900">{R.noInteractions}</p>
+                  <p className="mt-1 text-[14px] text-ink-500">{R.noContraindicationsDetail}</p>
                 </div>
-              </div>
-            ) : (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center">
-                <CheckCircle size={32} className="text-emerald-500 mx-auto mb-3" />
-                <p className="typo-drug-name text-emerald-800 mb-1">{t.results.noInteractions}</p>
-                <p className="typo-body text-emerald-600">
-                  {t.results.noContraindicationsDetail}
+              )}
+            </section>
+
+            {flaggedDrugs.length > 0 && <Advisories flaggedDrugs={flaggedDrugs} />}
+
+            {/* Phones: organ load + confidence follow the findings, before the actions */}
+            <div className="space-y-10 lg:hidden">{analytics}</div>
+
+            {/* Export & next steps */}
+            <section aria-labelledby="act-head" className="no-print">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-ink-900 pb-2.5">
+                <h3 id="act-head" className="kicker text-[11px] text-ink-900">{R.scanComplete}</h3>
+                <p className="font-mono text-[11px] text-ink-400 tnum">
+                  {reportId(results)} · {dateStr}
                 </p>
               </div>
-            )}
-
-            {flaggedDrugs.length > 0 && (
-              <div>
-                <h3 className="typo-section-header mb-3">{t.results.drugAdvisory}</h3>
-                <div className="space-y-2">
-                  {flaggedDrugs.map((flag, i) => <DrugFlagCard key={i} drugFlag={flag} species={patientInfo?.species} />)}
-                </div>
-              </div>
-            )}
-
-            {speciesNotes.length > 0 && (
-              <div>
-                <h3 className="typo-section-header mb-3 flex items-center gap-1.5"><Dna size={12} /> {t.results.speciesNotes}</h3>
-                <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 shadow-sm">
-                  {speciesNotes.map((note, i) => (
-                    <div key={i} className="px-4 py-3">
-                      <p className="text-[12px] font-medium text-slate-600 mb-0.5">{note.drug}</p>
-                      <p className="typo-body">{note.note}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Always-visible action bar */}
-            <ResultsActionBar
-              results={results}
-              patientInfo={patientInfo}
-              drugs={drugs}
-              species={species}
-              lang={lang}
-              t={t}
-            />
-
-            <div className="flex gap-3 no-print flex-wrap">
-              <button onClick={onBack} className="flex-1 px-4 py-2.5 text-[13px] font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">{t.results.backToMeds}</button>
-              {onUpdatePatientRecord && (
-                <button
-                  onClick={onUpdatePatientRecord}
-                  className="flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
-                >
-                  <Save size={13} />
-                  {t.results.updatePatientRecord}
-                </button>
-              )}
-              <button onClick={onNewAnalysis} className="flex-1 px-4 py-2.5 text-[13px] font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors shadow-sm">{t.results.newAnalysis}</button>
-            </div>
-
-            <p className="text-[11px] text-slate-400 text-center leading-relaxed pt-1">
-              {t.results.disclaimer}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Fixed bottom scan bar — shows only after full review in full system */}
-      {showScanBar && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 no-print animate-slide-up-bar">
-          <div className="bg-white border-t border-slate-200 shadow-lg px-4 sm:px-6 py-3">
-            <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2 min-w-0">
-                <CheckCircle size={16} className="text-emerald-500 shrink-0" />
-                <span className="text-[13px] font-medium text-slate-700 truncate">
-                  {t.results.allReviewed} · {drugFlags.length} {t.results.drugCountLabel} · {interactions.length} {t.results.interactionsFound}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 text-[12px] font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
-                  <Printer size={13} />
-                  {t.results.exportSummary}
-                </button>
+              <div className="mt-5 grid gap-2 sm:flex sm:flex-wrap">
                 <ScanExportButton
                   results={results}
                   patientInfo={patientInfo}
                   drugs={drugs}
                   species={species}
+                  contextFindings={contextFindings}
+                  variant="primary"
                 />
+                <button type="button" onClick={() => window.print()} className={btnSecondary}>{R.printPage}</button>
+                <button type="button" onClick={sendEmail} className={btnSecondary}>{R.sendViaEmail}</button>
+                {!embedded && onUpdatePatientRecord && (
+                  <button type="button" onClick={onUpdatePatientRecord} className={btnSecondary}>{R.updatePatientRecord}</button>
+                )}
               </div>
+              {!embedded && (
+                <div className="mt-8 flex flex-col-reverse gap-2 border-t border-ink-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                  <button type="button" onClick={onBack} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-1 text-[13.5px] font-semibold text-ink-600 transition-colors hover:text-ink-900 sm:justify-start">
+                    <span aria-hidden="true">←</span> {R.backToMeds}
+                  </button>
+                  <button type="button" onClick={onNewAnalysis} className={btnPrimary}>
+                    {R.newAnalysis} <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+              )}
+            </section>
+
+            <p className="text-[12px] leading-relaxed text-ink-400">
+              <BrandText>{R.disclaimer}</BrandText>
+            </p>
+          </div>
+
+          {/* Organ load + confidence — beside the patient on desktop, after the findings on phones */}
+          <aside className="hidden space-y-10 lg:block lg:[grid-area:aside]" aria-label={R.scanSummary}>
+            {analytics}
+          </aside>
+        </div>
+      </div>
+
+      {/* Appears once every interaction has been reviewed (clinic workspace) */}
+      {showScanBar && (
+        <div className="no-print fixed inset-x-0 bottom-0 z-30 animate-slide-up-bar border-t border-ink-200 bg-white/95 backdrop-blur" role="status">
+          <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+            <p className="min-w-0">
+              <span className="kicker text-[10.5px] text-emerald-700">{R.allReviewed}</span>
+              <span className={`ml-3 hidden text-[11.5px] text-ink-400 tnum md:inline ${mono}`}>
+                {plural(R.coverage, 'drugs', drugFlags.length)} · {plural(R.coverage, 'interactions', interactions.length)}
+              </span>
+            </p>
+            <div className="flex shrink-0 gap-2">
+              <button type="button" onClick={() => window.print()} className={`${btnSecondary} hidden sm:inline-flex`}>{R.printPage}</button>
+              <ScanExportButton results={results} patientInfo={patientInfo} drugs={drugs} species={species} contextFindings={contextFindings} variant="primary" />
             </div>
           </div>
         </div>

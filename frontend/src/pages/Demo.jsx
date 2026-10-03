@@ -1,788 +1,508 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ProductLockup } from '../components/NuvovetLogo';
+import { DurIsland } from '../components/dur/DurIsland';
+import { useDurMonitor } from '../components/dur/useDurMonitor';
+import { SEVERITY_RANK } from '../components/dur/findings';
 import {
-  ArrowLeft, ArrowRight, Zap, ChevronRight, ChevronDown, ChevronUp,
-  Heart, Thermometer, Weight, Calendar, AlertCircle,
-  Plus, X, Search, Pencil, FileText, Activity
-} from 'lucide-react';
-import { NuvovetLogo, NuvovetWordmark } from '../components/NuvovetLogo';
-import { DrugInput } from '../components/DrugInput';
-import { AnalysisScreen } from '../components/AnalysisScreen';
+  EmrTitleBar, EmrMenuBar, EmrToolbar, EmrStatusBar, WaitingList, PatientInfo, EmrTabs,
+  VisitStrip, RxSearch, RxGrid, RxMemo, RxHistory, OwnerPanel, SoapPanel, LabsPanel, HistoryPanel, EmrButton,
+  patientName, loc,
+} from '../components/emr/EmrUI';
 import { ResultsDisplay } from '../components/ResultsDisplay';
+import { RequestAccessModal } from '../components/RequestAccessModal';
+import { getDemoPatients } from '../data/breedProfiles';
 import { getDrugById } from '../data/drugDatabase';
-import { getBreedsForSpecies, getBreedProfile } from '../data/breedProfiles';
-import { runFullDURAnalysis } from '../utils/durEngine';
-import { getBreedImage } from '../assets/breeds/index';
+import { makeRxLine } from '../data/emrCatalog';
 import { useI18n, LangToggle } from '../i18n';
+import { usePageCanvas, CANVAS } from '../lib/usePageCanvas';
 
-// ── Common veterinary conditions for autocomplete ───────────────
-const COMMON_CONDITIONS = [
-  'Hip Dysplasia', 'Elbow Dysplasia', 'Osteoarthritis', 'Chronic Pain',
-  'Seasonal Allergies', 'Atopic Dermatitis', 'Food Allergy',
-  'Diabetes mellitus', 'Hypothyroidism', 'Hyperthyroidism', 'Cushing\'s Disease',
-  'CKD (Chronic Kidney Disease)', 'Early Stage Renal Failure', 'Hepatic Disease',
-  'Congestive Heart Failure', 'Hypertrophic Cardiomyopathy (HCM)', 'Dilated Cardiomyopathy',
-  'Epilepsy', 'Seizure Disorder', 'IVDD — Intervertebral Disc Disease',
-  'Pancreatitis', 'Inflammatory Bowel Disease', 'Urinary Tract Infection',
-  'Feline Lower Urinary Tract Disease', 'Anxiety', 'Separation Anxiety',
-  'Brachycephalic Syndrome', 'MDR1 Deficient', 'Immune-Mediated Hemolytic Anemia',
-  'Lymphoma', 'Mast Cell Tumor', 'Heartworm Disease',
-];
+// ──────────────────────────────────────────────────────────────────
+// /demo — nuvoDUR on top of a simulated clinic EMR.
+//
+//   dark bar     nuvoDUR: what this is, the scenario, guide, report
+//   grey window  the clinic's EMR (a classic Windows desktop app)
+//   island       nuvoDUR, docked across the EMR window's top edge
+// ──────────────────────────────────────────────────────────────────
 
-// ── Step indicator ──────────────────────────────────────────────
-function StepIndicator({ current, steps }) {
-  return (
-    <div className="flex items-center justify-center gap-1.5 py-3">
-      {steps.map((step, i) => (
-        <div key={i} className="flex items-center gap-1.5">
-          <div className={`h-1.5 rounded-full transition-all duration-500 ${
-            i < current ? 'w-6 bg-slate-900' :
-            i === current ? 'w-8 bg-slate-900' :
-            'w-4 bg-slate-200'
-          }`} />
-        </div>
-      ))}
-    </div>
-  );
+const GUIDE_KEY = 'nuvovet-demo-guide-v3';
+const FAVORITES = ['gabapentin', 'omeprazole', 'amoxicillin', 'maropitant', 'prednisolone', 'meloxicam', 'trazodone'];
+
+function readGuideDone() {
+  try { return localStorage.getItem(GUIDE_KEY) === '1'; } catch { return false; }
+}
+function writeGuideDone() {
+  try { localStorage.setItem(GUIDE_KEY, '1'); } catch { /* storage unavailable */ }
 }
 
-// ── Breed image helper ──────────────────────────────────────────
-function BreedPhoto({ breedId, species, size = 44, className = '' }) {
-  const src = getBreedImage(breedId);
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt={breedId}
-        className={`rounded-full object-cover border-2 border-slate-200 bg-slate-50 ${className}`}
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-  return (
-    <div
-      className={`rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-xl shrink-0 ${className}`}
-      style={{ width: size, height: size }}
-    >
-      {species === 'dog' ? '🐕' : '🐈'}
-    </div>
-  );
+function initialLines(entry) {
+  return entry.profile.rx
+    .map((r) => {
+      const line = makeRxLine(r.id, entry.species, { days: r.days });
+      return line ? { ...line, chronic: Boolean(r.chronic) } : null;
+    })
+    .filter(Boolean);
 }
 
-// ── Step 1: Species Selection ───────────────────────────────────
-function SpeciesStep({ onSelect }) {
-  const [hovered, setHovered] = useState(null);
+function isoDate(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function useClock(lang) {
+  const fmt = useCallback(() => {
+    const d = new Date();
+    const wd = d.toLocaleDateString(lang === 'ko' ? 'ko-KR' : 'en-US', { weekday: 'short' });
+    const time = d.toLocaleTimeString(lang === 'ko' ? 'ko-KR' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return `${isoDate(d)} (${wd}) ${time}`;
+  }, [lang]);
+  const [now, setNow] = useState(fmt);
+  useEffect(() => {
+    setNow(fmt());
+    const id = setInterval(() => setNow(fmt()), 20000);
+    return () => clearInterval(id);
+  }, [fmt]);
+  return now;
+}
+
+function useElementWidth(ref) {
+  const [w, setW] = useState(1000);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
+    ro.observe(el);
+    setW(el.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  }, [ref]);
+  return w;
+}
+
+// ── First-run guide (spotlight coach marks) ──────────────────────
+function Guide({ step, steps, onNext, onSkip }) {
   const { t } = useI18n();
+  const [rect, setRect] = useState(null);
+  const current = steps[step];
+
+  useLayoutEffect(() => {
+    if (!current) return undefined;
+    const find = () => [...document.querySelectorAll(`[data-tour="${current.target}"]`)].find((n) => n.offsetParent !== null);
+    const measure = () => {
+      const el = find();
+      if (!el) { setRect(null); return; }
+      const r = el.getBoundingClientRect();
+      setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    };
+    find()?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    measure();
+    const id = setInterval(measure, 250); // follows island morphs / layout shifts
+    window.addEventListener('resize', measure);
+    return () => { clearInterval(id); window.removeEventListener('resize', measure); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, current?.target]);
+
+  if (!current) return null;
+  const pad = current.pad ?? 8;
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const cardW = Math.min(352, vw - 24);
+  let top = rect ? rect.top + rect.height + pad + 12 : vh / 2 - 90;
+  if (rect && top + 210 > vh) top = Math.max(12, rect.top - pad - 12 - 200);
+  if (rect && rect.height > vh * 0.6) top = Math.min(vh - 230, Math.max(rect.top + 90, 80));
+  let left = rect ? rect.left + rect.width / 2 - cardW / 2 : vw / 2 - cardW / 2;
+  left = Math.max(12, Math.min(left, vw - cardW - 12));
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-5 py-10 sm:py-16 animate-slide-in">
-      <p className="typo-section-header mb-2">{t.demo.step1}</p>
-      <h2 className="typo-page-title text-center mb-2">{t.demo.selectSpecies}</h2>
-      <p className="typo-body text-center mb-10 max-w-sm">
-        {t.demo.selectSpeciesDesc}
-      </p>
-
-      <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
-        {[
-          { id: 'dog', label: t.demo.canine, sub: t.demo.canineSub, img: 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=400&h=300&fit=crop&q=80' },
-          { id: 'cat', label: t.demo.feline, sub: t.demo.felineSub, img: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=300&fit=crop&q=80' },
-        ].map((sp) => (
-          <button
-            key={sp.id}
-            onClick={() => onSelect(sp.id)}
-            onMouseEnter={() => setHovered(sp.id)}
-            onMouseLeave={() => setHovered(null)}
-            className={`relative flex flex-col items-center gap-3 p-4 sm:p-6 rounded-xl border-2 transition-all duration-300 overflow-hidden ${
-              hovered === sp.id
-                ? 'border-slate-900 bg-slate-50 shadow-md scale-[1.02]'
-                : 'border-slate-200 bg-white hover:border-slate-300'
-            }`}
-          >
-            <div className="w-full aspect-[4/3] rounded-lg overflow-hidden bg-slate-100 mb-1">
-              <img
-                src={sp.img}
-                alt={sp.label}
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-            </div>
-            <div>
-              <p className="typo-drug-name">{sp.label}</p>
-              <p className="typo-label mt-0.5">{sp.sub}</p>
-            </div>
+    <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label={current.title}>
+      {rect ? (
+        <div
+          className="pointer-events-none absolute ring-2 ring-dur-300 transition-all duration-300 ease-out-expo"
+          style={{
+            borderRadius: current.radius ?? 6,
+            top: rect.top - pad,
+            left: rect.left - pad,
+            width: rect.width + pad * 2,
+            height: rect.height + pad * 2,
+            boxShadow: '0 0 0 9999px rgba(6,10,18,0.62)',
+          }}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-ink-950/60" />
+      )}
+      <div
+        className="absolute animate-sheet-up rounded-2xl bg-island-bg p-5 text-white shadow-island ring-1 ring-white/10"
+        style={{ top, left, width: cardW }}
+      >
+        <div className="kicker flex items-baseline gap-3 text-[10.5px]">
+          <span className="text-island-info tnum">{String(step + 1).padStart(2, '0')} / {String(steps.length).padStart(2, '0')}</span>
+          <span className="text-white/45">{current.kicker}</span>
+        </div>
+        <p className="mt-2.5 text-[16px] font-semibold tracking-[-0.015em]">{current.title}</p>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-white/65">{current.body}</p>
+        <div className="mt-5 flex items-center justify-between">
+          <button type="button" onClick={onSkip} className="h-9 rounded-full px-1 text-[12.5px] font-medium text-white/45 hover:text-white">{t.demoX.skip}</button>
+          <button type="button" onClick={onNext} className="inline-flex h-9 items-center rounded-full bg-white px-4 text-[13px] font-semibold text-ink-900 hover:bg-white/90">
+            {step === steps.length - 1 ? t.demoX.start : t.demoX.next}
           </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Step 2: Breed Selection ─────────────────────────────────────
-function BreedStep({ species, onSelect, onBack }) {
-  const breeds = getBreedsForSpecies(species);
-  const { t } = useI18n();
-
-  return (
-    <div className="flex-1 flex flex-col px-5 py-8 animate-slide-in">
-      <div className="max-w-lg mx-auto w-full">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 mb-6 transition-colors">
-          <ArrowLeft size={14} /> {t.back}
-        </button>
-
-        <p className="typo-section-header mb-2">{t.demo.step2}</p>
-        <h2 className="typo-page-title mb-1.5">{t.demo.selectBreed}</h2>
-        <p className="typo-body mb-8">
-          {t.demo.selectBreedDesc}
-        </p>
-
-        <div className="space-y-3">
-          {breeds.map((breed) => (
-            <button
-              key={breed.id}
-              onClick={() => onSelect(breed.id)}
-              className="w-full flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:shadow-sm transition-all duration-200 text-left group"
-            >
-              <BreedPhoto breedId={breed.id} species={species} size={56} />
-              <div className="flex-1 min-w-0">
-                <p className="typo-drug-name">{breed.breed}</p>
-                <p className="typo-label mt-0.5 truncate">
-                  {breed.profile.name} · {breed.profile.age} · {breed.profile.conditions.join(', ')}
-                </p>
-                {breed.demonstrates && (
-                  <p className="text-[10px] text-slate-400 mt-1 italic">
-                    {t.demo.demonstrates}: {breed.demonstrates}
-                  </p>
-                )}
-              </div>
-              <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-500 transition-colors shrink-0" />
-            </button>
-          ))}
         </div>
       </div>
     </div>
   );
 }
 
-// ── Step 3: Patient EMR Profile (Collapsed Summary) ─────────────
-function PatientProfileStep({ profile, breed, breedId, species, onUpdateProfile, onContinue, onBack }) {
+// ── Full report sheet ────────────────────────────────────────────
+function ReportSheet({ open, onClose, entry, analysis, drugs, contextFindings }) {
   const { t, lang } = useI18n();
-  const p = profile;
-  const [expanded, setExpanded] = useState(false);
-
-  // Editable fields
-  const [editingWeight, setEditingWeight] = useState(false);
-  const [tempWeight, setTempWeight] = useState(p.weight);
-  const [newAllergy, setNewAllergy] = useState('');
-  const [newCondition, setNewCondition] = useState('');
-  const [showAddAllergy, setShowAddAllergy] = useState(false);
-  const [showAddCondition, setShowAddCondition] = useState(false);
-  const [conditionSuggestions, setConditionSuggestions] = useState([]);
-
-  const statusColor = (s) => {
-    if (s === 'high') return 'text-red-600 bg-red-50';
-    if (s === 'low') return 'text-amber-600 bg-amber-50';
-    return 'text-slate-600 bg-slate-50';
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+  if (!open) return null;
+  const p = entry.profile;
+  const flaggedLabs = Object.entries(p.labResults)
+    .filter(([, l]) => l.status !== 'normal')
+    .map(([key, l]) => ({ key, ...l }));
+  const patientInfo = {
+    name: patientName(entry, lang),
+    species: entry.species,
+    breed: lang === 'ko' ? entry.breedKo : entry.breed,
+    weight: p.weight,
+    conditions: p.conditions,
+    flaggedLabs,
   };
-
-  // Get abnormal labs automatically
-  const abnormalLabs = Object.entries(p.labResults)
-    .filter(([, lab]) => lab.status !== 'normal')
-    .map(([key, lab]) => ({ key, ...lab }));
-
-  // Condition autocomplete
-  const handleConditionInput = (value) => {
-    setNewCondition(value);
-    if (value.trim().length >= 2) {
-      const matches = COMMON_CONDITIONS.filter(c =>
-        c.toLowerCase().includes(value.toLowerCase()) &&
-        !p.conditions.includes(c)
-      ).slice(0, 5);
-      setConditionSuggestions(matches);
-    } else {
-      setConditionSuggestions([]);
-    }
-  };
-
-  const addCondition = (cond) => {
-    onUpdateProfile({ ...p, conditions: [...p.conditions, cond] });
-    setNewCondition('');
-    setConditionSuggestions([]);
-    setShowAddCondition(false);
-  };
-
   return (
-    <div className="flex-1 flex flex-col px-5 py-6 animate-slide-in">
-      <div className="max-w-lg mx-auto w-full space-y-5">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors">
-          <ArrowLeft size={14} /> {t.back}
-        </button>
-
-        <div>
-          <p className="typo-section-header mb-2">{t.demo.step3}</p>
-          <h2 className="typo-page-title mb-1">{t.demo.patientChart}</h2>
-          <p className="typo-body">{t.demo.patientChartDesc}</p>
-        </div>
-
-        {/* ── Summary Card (always visible) ── */}
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-          <div className="px-4 py-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <BreedPhoto breedId={breedId} species={species} size={80} className="border-slate-200" />
-              <div>
-                <h3 className="typo-drug-name text-[15px]">{p.name}</h3>
-                <p className="typo-label">{breed} · {species === 'dog' ? t.species.dog : t.species.cat} · {p.sex}</p>
-              </div>
-            </div>
-            <span className="typo-label px-2 py-1 bg-slate-200/60 text-slate-500 rounded-full">
-              {t.demoPatient}
-            </span>
-          </div>
-
-          {/* Key facts row */}
-          <div className="px-4 py-3 grid grid-cols-3 gap-3">
-            <div>
-              <p className="typo-label uppercase">{t.demo.age}</p>
-              <p className="typo-drug-name text-[14px]">{p.age}</p>
-            </div>
-            <div>
-              <p className="typo-label uppercase">{t.demo.weight}</p>
-              {editingWeight ? (
-                <input
-                  type="number"
-                  value={tempWeight}
-                  onChange={(e) => setTempWeight(parseFloat(e.target.value) || 0)}
-                  onBlur={() => { onUpdateProfile({ ...p, weight: tempWeight }); setEditingWeight(false); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { onUpdateProfile({ ...p, weight: tempWeight }); setEditingWeight(false); } }}
-                  className="w-16 text-sm font-semibold text-slate-900 border border-slate-300 rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                  autoFocus
-                />
-              ) : (
-                <button
-                  onClick={() => setEditingWeight(true)}
-                  className="typo-drug-name text-[14px] hover:text-slate-600 inline-flex items-center gap-1 group"
-                >
-                  {p.weight} kg
-                  <Pencil size={9} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
-                </button>
-              )}
-            </div>
-            <div>
-              <p className="typo-label uppercase">{t.demo.bcs}</p>
-              <p className="typo-drug-name text-[14px]">{p.bodyCondition}</p>
-            </div>
-          </div>
-
-          <div className="px-4 pb-3 flex flex-wrap gap-2">
-            <span className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-full px-2 py-0.5">
-              Chart #{p.animalChartId}
-            </span>
-            <span className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-full px-2 py-0.5">
-              Status: {p.patientStatus}
-            </span>
-            {p.lastVisitDate && (
-              <span className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-full px-2 py-0.5">
-                Last visit: {p.lastVisitDate}
-              </span>
-            )}
-          </div>
-
-          {/* Active conditions */}
-          <div className="px-4 pb-3">
-            <p className="typo-label uppercase mb-1.5">{t.demo.activeConditions}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {p.conditions.map((cond, i) => (
-                <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 text-xs font-medium rounded-full border border-amber-100">
-                  {cond}
-                  <button
-                    onClick={() => onUpdateProfile({ ...p, conditions: p.conditions.filter((_, j) => j !== i) })}
-                    className="text-amber-400 hover:text-amber-600"
-                  >
-                    <X size={10} />
-                  </button>
-                </span>
-              ))}
-              <button
-                onClick={() => setShowAddCondition(true)}
-                className="inline-flex items-center gap-0.5 px-2 py-0.5 text-xs text-slate-400 hover:text-slate-600 border border-dashed border-slate-200 rounded-full"
-              >
-                <Plus size={10} /> {t.add}
-              </button>
-            </div>
-            {showAddCondition && (
-              <div className="relative mt-2 animate-fade-in">
-                <input
-                  type="text"
-                  value={newCondition}
-                  onChange={(e) => handleConditionInput(e.target.value)}
-                  placeholder={t.demo.typeToSearch}
-                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newCondition.trim()) {
-                      addCondition(newCondition.trim());
-                    }
-                    if (e.key === 'Escape') {
-                      setShowAddCondition(false);
-                      setNewCondition('');
-                      setConditionSuggestions([]);
-                    }
-                  }}
-                />
-                {conditionSuggestions.length > 0 && (
-                  <div className="absolute z-20 top-full mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                    {conditionSuggestions.map((sug, i) => (
-                      <button
-                        key={i}
-                        onClick={() => addCondition(sug)}
-                        className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 border-b border-slate-100 last:border-0"
-                      >
-                        {sug}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Abnormal labs auto-surfaced */}
-          {abnormalLabs.length > 0 && (
-            <div className="px-4 pb-3">
-              <p className="typo-label uppercase mb-1.5">{t.demo.flaggedLabs}</p>
-              <div className="flex flex-wrap gap-2">
-                {abnormalLabs.map((lab, i) => (
-                  <span
-                    key={i}
-                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      lab.status === 'high' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-amber-50 text-amber-600 border border-amber-100'
-                    }`}
-                  >
-                    {lab.key.toUpperCase()}: {lab.value} {lab.unit} {lab.status === 'high' ? '↑' : '↓'}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Edit Details Expand ── */}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors py-1"
-        >
-          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          {expanded ? t.demo.hideDetails : t.demo.editDetails}
-        </button>
-
-        {expanded && (
-          <div className="space-y-5 animate-fade-in">
-            {/* Vitals grid */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-                <span className="typo-section-header">{t.demo.vitals}</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-100">
-                {[
-                  { icon: Calendar, label: t.demo.age, value: p.age },
-                  { icon: Weight, label: t.demo.weight, value: `${p.weight} kg` },
-                  { icon: Heart, label: t.demo.heartRate, value: p.heartRate },
-                  { icon: Thermometer, label: t.demo.temp, value: p.temperature },
-                ].map((v, i) => (
-                  <div key={i} className="px-3 py-3 text-center">
-                    <v.icon size={13} className="text-slate-400 mx-auto mb-1" />
-                    <p className="typo-label mb-0.5">{v.label}</p>
-                    <p className="typo-drug-name text-[14px]">{v.value}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Body Condition */}
-            <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between shadow-sm">
-              <div>
-                <p className="typo-label mb-0.5">{t.demo.bodyCondition}</p>
-                <p className="typo-drug-name text-[14px]">{p.bodyCondition}</p>
-              </div>
-              <div>
-                <p className="typo-label mb-0.5">{t.demo.respRate}</p>
-                <p className="typo-drug-name text-[14px]">{p.respRate}</p>
-              </div>
-            </div>
-
-            {/* Allergies */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                <span className="typo-section-header">{t.demo.knownAllergies}</span>
-                <button
-                  onClick={() => setShowAddAllergy(true)}
-                  className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 transition-colors"
-                >
-                  <Plus size={12} /> {t.add}
-                </button>
-              </div>
-              <div className="px-4 py-3">
-                {p.allergies.length === 0 ? (
-                  <p className="typo-body italic">{t.demo.nkda}</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {p.allergies.map((allergy, i) => (
-                      <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-red-700 text-xs font-medium rounded-full border border-red-100">
-                        {allergy}
-                        <button
-                          onClick={() => onUpdateProfile({ ...p, allergies: p.allergies.filter((_, j) => j !== i) })}
-                          className="text-red-400 hover:text-red-600"
-                        >
-                          <X size={11} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {showAddAllergy && (
-                  <div className="flex gap-2 mt-2 animate-fade-in">
-                    <input
-                      type="text"
-                      value={newAllergy}
-                      onChange={(e) => setNewAllergy(e.target.value)}
-                      placeholder="e.g., Penicillin"
-                      className="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newAllergy.trim()) {
-                          onUpdateProfile({ ...p, allergies: [...p.allergies, newAllergy.trim()] });
-                          setNewAllergy('');
-                          setShowAddAllergy(false);
-                        }
-                      }}
-                    />
-                    <button
-                      onClick={() => {
-                        if (newAllergy.trim()) {
-                          onUpdateProfile({ ...p, allergies: [...p.allergies, newAllergy.trim()] });
-                          setNewAllergy('');
-                        }
-                        setShowAddAllergy(false);
-                      }}
-                      className="px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg hover:bg-slate-800"
-                    >
-                      {t.add}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Lab Results */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-                <span className="typo-section-header">{t.demo.allLabResults}</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-y divide-slate-100">
-                {Object.entries(p.labResults).map(([key, lab]) => (
-                  <div key={key} className="px-3 py-2.5">
-                    <p className="typo-label uppercase mb-0.5">{key}</p>
-                    <p className={`text-sm font-semibold ${lab.status === 'high' ? 'text-red-600' : lab.status === 'low' ? 'text-amber-600' : 'text-slate-900'}`}>
-                      {lab.value}
-                      <span className="text-xs font-normal text-slate-400 ml-1">{lab.unit}</span>
-                    </p>
-                    {lab.status !== 'normal' && (
-                      <span className={`text-xs font-medium ${lab.status === 'high' ? 'text-red-500' : 'text-amber-500'}`}>
-                        {lab.status === 'high' ? '↑ High' : '↓ Low'}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Clinical History */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-                <span className="typo-section-header">{t.demo.clinicalHistory}</span>
-              </div>
-              <div className="px-4 py-3">
-                <p className="typo-body leading-relaxed">{p.history}</p>
-              </div>
-            </div>
-
-            {/* EMR Registration Fields */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-                <span className="typo-section-header">EMR Registration</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
-                <div className="px-4 py-3 space-y-1">
-                  <p className="typo-label">DOB</p>
-                  <p className="typo-drug-name text-[13px]">{p.dateOfBirth || '-'}</p>
-                  <p className="typo-label mt-2">Registration No.</p>
-                  <p className="typo-drug-name text-[13px]">{p.animalRegistrationNumber || '-'}</p>
-                  <p className="typo-label mt-2">Blood Type</p>
-                  <p className="typo-drug-name text-[13px]">{p.bloodType || '-'}</p>
-                </div>
-                <div className="px-4 py-3 space-y-1">
-                  <p className="typo-label">Attending Vet</p>
-                  <p className="typo-drug-name text-[13px]">{p.attendingVet || '-'}</p>
-                  <p className="typo-label mt-2">Primary Vet</p>
-                  <p className="typo-drug-name text-[13px]">{p.primaryVet || '-'}</p>
-                  <p className="typo-label mt-2">Insurance</p>
-                  <p className="typo-drug-name text-[13px]">{p.insuranceGroup || '-'}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Continue button */}
-        <button
-          onClick={onContinue}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-slate-900 text-white text-sm font-medium rounded-xl hover:bg-slate-800 transition-all duration-200 shadow-sm"
-        >
-          {t.demo.continueToMeds}
-          <ArrowRight size={15} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Step 4: Medication Review ───────────────────────────────────
-function MedicationStep({ drugs, species, patientName, weight, onAddDrug, onRemoveDrug, onUpdateDrug, onRunAnalysis, onBack }) {
-  const { t } = useI18n();
-  return (
-    <div className="flex-1 flex flex-col px-5 py-6 animate-slide-in">
-      <div className="max-w-lg mx-auto w-full space-y-5">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors">
-          <ArrowLeft size={14} /> {t.demo.backToChart}
-        </button>
-
-        <div>
-          <p className="typo-section-header mb-2">{t.demo.step4}</p>
-          <h2 className="typo-page-title mb-1">{t.demo.prescriptions}</h2>
-          <p className="typo-body">
-            {t.demo.prescriptionsDesc} <span className="font-medium text-slate-700">{patientName}</span>
-          </p>
-        </div>
-
-        {/* Drug input */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-          <h3 className="typo-section-header mb-3">
-            {t.demo.currentMeds} ({drugs.length})
-          </h3>
-          <DrugInput
-            drugs={drugs}
-            onAddDrug={onAddDrug}
-            onRemoveDrug={onRemoveDrug}
-            onUpdateDrug={onUpdateDrug}
-            species={species}
-            weight={weight || 10}
-            demoMode
-          />
-        </div>
-
-        {/* Run button */}
-        <button
-          onClick={onRunAnalysis}
-          disabled={drugs.length === 0}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-slate-900 text-white text-sm font-medium rounded-xl hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
-        >
-          <Zap size={15} />
-          {t.fullSystem.runScan}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Demo Page ──────────────────────────────────────────────
-const STEPS = ['species', 'breed', 'profile', 'medications', 'analyzing', 'results'];
-
-export default function Demo() {
-  const navigate = useNavigate();
-  const { t } = useI18n();
-  const [step, setStep] = useState('species');
-  const [species, setSpecies] = useState(null);
-  const [breedId, setBreedId] = useState(null);
-  const [breedName, setBreedName] = useState('');
-  const [profile, setProfile] = useState(null);
-  const [drugs, setDrugs] = useState([]);
-  const [results, setResults] = useState(null);
-
-  const currentStepIndex = STEPS.indexOf(step);
-
-  const handleSpeciesSelect = (sp) => {
-    setSpecies(sp);
-    setStep('breed');
-  };
-
-  const handleBreedSelect = (id) => {
-    setBreedId(id);
-    const breed = getBreedProfile(species, id);
-    if (breed) {
-      setProfile({ ...breed.profile });
-      setBreedName(breed.breed);
-      // Load default drugs
-      const defaultDrugs = breed.profile.defaultDrugs
-        .map(drugId => getDrugById(drugId))
-        .filter(Boolean);
-      setDrugs(defaultDrugs);
-    }
-    setStep('profile');
-  };
-
-  const handleUpdateProfile = (updated) => {
-    setProfile(updated);
-  };
-
-  const handleAddDrug = (drug) => {
-    setDrugs(prev => [...prev, drug]);
-  };
-
-  const handleRemoveDrug = (drugId) => {
-    setDrugs(prev => prev.filter(d => d.id !== drugId));
-  };
-
-  const handleUpdateDrug = (drugId, patch) => {
-    setDrugs(prev => prev.map((d) => (d.id === drugId ? { ...d, ...patch } : d)));
-  };
-
-  const handleRunAnalysis = () => {
-    if (drugs.length < 1) return;
-    setStep('analyzing');
-  };
-
-  const handleAnalysisComplete = useCallback(() => {
-    const analysisResults = runFullDURAnalysis(drugs, species, profile?.weight || 10);
-    setResults(analysisResults);
-    setStep('results');
-  }, [drugs, species, profile]);
-
-  const handleBackToMeds = () => {
-    setStep('medications');
-  };
-
-  const handleNewAnalysis = () => {
-    setStep('species');
-    setSpecies(null);
-    setBreedId(null);
-    setBreedName('');
-    setProfile(null);
-    setDrugs([]);
-    setResults(null);
-  };
-
-  // Build enriched patient info for results
-  const abnormalLabs = profile ? Object.entries(profile.labResults || {})
-    .filter(([, lab]) => lab.status !== 'normal')
-    .map(([key, lab]) => ({ key, ...lab })) : [];
-
-  const patientInfo = profile ? {
-    name: profile.name,
-    species,
-    breed: breedName,
-    weight: profile.weight,
-    conditions: profile.conditions,
-    flaggedLabs: abnormalLabs,
-  } : { name: profile?.name, species };
-
-  return (
-    <div className="min-h-screen bg-gray-50/50 flex flex-col relative">
-      {/* Dot grid background */}
-      <div className="fixed inset-0 bg-dot-grid pointer-events-none" />
-
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-[0_1px_3px_rgba(15,23,42,0.07),0_3px_10px_rgba(15,23,42,0.04)]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-[62px] flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              if (step === 'species') navigate('/');
-              else if (step === 'breed') setStep('species');
-              else if (step === 'profile') setStep('breed');
-              else if (step === 'medications') setStep('profile');
-              else if (step === 'results') setStep('medications');
-              else navigate('/');
-            }}
-            className="p-2 -ml-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-colors"
-          >
-            <ArrowLeft size={18} />
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label={t.results.durReport}>
+      <button type="button" aria-label={t.close} className="absolute inset-0 bg-ink-950/55 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="relative flex max-h-[92dvh] w-full max-w-6xl animate-sheet-up flex-col overflow-hidden rounded-t-3xl bg-white shadow-window sm:rounded-3xl">
+        <div className="flex items-center gap-3 border-b border-ink-200/70 bg-white px-4 py-3 sm:px-6">
+          <ProductLockup product="dur" size="sm" />
+          <button type="button" onClick={onClose} className="ml-auto h-9 rounded-full px-3 text-[13px] font-semibold text-ink-600 hover:bg-ink-100 hover:text-ink-900">
+            {t.close}
           </button>
-          <div className="flex items-center gap-3">
-            <NuvovetWordmark />
-          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <LangToggle />
-          <span className="typo-label px-2.5 py-1 bg-slate-100 text-slate-500 rounded-full">
-            {t.demoLabel}
-          </span>
-        </div>
-        </div>
-      </header>
-
-      {/* Step indicator */}
-      {step !== 'analyzing' && step !== 'results' && (
-        <StepIndicator current={currentStepIndex} steps={STEPS.slice(0, 4)} />
-      )}
-
-      {/* Content */}
-      {step === 'species' && (
-        <SpeciesStep onSelect={handleSpeciesSelect} />
-      )}
-
-      {step === 'breed' && (
-        <BreedStep
-          species={species}
-          onSelect={handleBreedSelect}
-          onBack={() => setStep('species')}
-        />
-      )}
-
-      {step === 'profile' && profile && (
-        <PatientProfileStep
-          profile={profile}
-          breed={breedName}
-          breedId={breedId}
-          species={species}
-          onUpdateProfile={handleUpdateProfile}
-          onContinue={() => setStep('medications')}
-          onBack={() => setStep('breed')}
-        />
-      )}
-
-      {step === 'medications' && (
-        <MedicationStep
-          drugs={drugs}
-          species={species}
-          patientName={profile?.name}
-          weight={profile?.weight}
-          onAddDrug={handleAddDrug}
-          onRemoveDrug={handleRemoveDrug}
-          onUpdateDrug={handleUpdateDrug}
-          onRunAnalysis={handleRunAnalysis}
-          onBack={() => setStep('profile')}
-        />
-      )}
-
-      {step === 'analyzing' && (
-        <AnalysisScreen
-          onComplete={handleAnalysisComplete}
-          drugCount={drugs.length}
-          species={species}
-        />
-      )}
-
-      {step === 'results' && (
-        <main className="flex-1 pb-8">
+        <div className="emr-scroll min-h-0 flex-1 overflow-y-auto">
           <ResultsDisplay
-            results={results}
-            onBack={handleBackToMeds}
-            onNewAnalysis={handleNewAnalysis}
+            results={analysis.results}
             patientInfo={patientInfo}
             drugs={drugs}
-            species={species}
+            species={entry.species}
+            embedded
+            isFullSystem
+            contextFindings={contextFindings}
+            onBack={onClose}
+            onNewAnalysis={onClose}
           />
-        </main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Page ─────────────────────────────────────────────────────────
+export default function Demo() {
+  usePageCanvas(CANVAS.dark);
+  const { t, lang } = useI18n();
+  const patients = useMemo(() => getDemoPatients(), []);
+  // /demo?patient=<id> opens straight on that chart (linked from the landing page)
+  const [searchParams] = useSearchParams();
+  const [selectedId, setSelectedId] = useState(() => {
+    const id = searchParams.get('patient');
+    return patients.some((e) => e.id === id) ? id : 'golden_retriever';
+  });
+  const [charts, setCharts] = useState(() => Object.fromEntries(patients.map((e) => [e.id, initialLines(e)])));
+  const [tab, setTab] = useState('rx');
+  const [selectedLine, setSelectedLine] = useState(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [guideStep, setGuideStep] = useState(() => (readGuideDone() ? -1 : 0));
+  const [toast, setToast] = useState(null);
+  const clock = useClock(lang);
+  const mainRef = useRef(null);
+  const mainW = useElementWidth(mainRef);
+
+  const entry = patients.find((e) => e.id === selectedId) || patients[0];
+  const lines = charts[entry.id];
+  const species = entry.species;
+
+  const drugs = useMemo(
+    () => lines.map((l) => ({ ...l.drug, dosePerKg: Number(l.qty) > 0 ? Number(l.qty) : undefined })),
+    [lines],
+  );
+  const patient = useMemo(() => ({ ...entry.profile, breed: entry.breed, name: patientName(entry, lang) }), [entry, lang]);
+
+  const toastTimer = useRef(null);
+  const showToast = (word, msg, tone = 'clear') => {
+    setToast({ word, msg, tone });
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2600);
+  };
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+  useEffect(() => { setSelectedLine(null); }, [entry.id]);
+
+  const updateLines = (fn) => setCharts((c) => ({ ...c, [entry.id]: fn(c[entry.id]) }));
+
+  const applyResolution = useCallback((res) => {
+    if (!res) return;
+    setCharts((c) => {
+      const cur = c[entry.id];
+      let next = cur;
+      if (res.type === 'replace') {
+        next = cur.map((l) => {
+          if (l.drugId !== res.fromId) return l;
+          const repl = makeRxLine(res.toId, species, { days: l.days, isNew: true });
+          return repl || l;
+        });
+      } else if (res.type === 'remove') {
+        next = cur.filter((l) => l.drugId !== res.fromId);
+      } else if (res.type === 'dose') {
+        next = cur.map((l) => {
+          if (l.drugId !== res.drugId) return l;
+          const base = Number(l.qty) || l.drug.defaultDose?.[species] || 0;
+          const qty = res.value != null ? res.value : +(base * res.factor).toFixed(3);
+          return { ...l, qty };
+        });
+      } else if (res.type === 'add') {
+        const line = makeRxLine(res.toId, species, { isNew: true });
+        if (line && !cur.some((l) => l.drugId === res.toId)) next = [...cur, line];
+      }
+      return { ...c, [entry.id]: next };
+    });
+  }, [entry.id, species]);
+
+  const monitor = useDurMonitor({ drugs, species, patient, patientKey: entry.id, t, lang, onApplyResolution: applyResolution });
+  const island = monitor.islandProps;
+
+  // nuvoDUR overlay on the EMR grid: unreviewed findings, strongest severity per drug
+  const overlay = useMemo(() => {
+    const out = {};
+    for (const f of monitor.findings) {
+      if (f.reviewed) continue;
+      for (const d of f.raw.drugs || []) {
+        if (!out[d.id] || SEVERITY_RANK[f.severity] > SEVERITY_RANK[out[d.id]]) out[d.id] = f.severity;
+      }
+    }
+    return out;
+  }, [monitor.findings]);
+  const focus = island.view === 'expanded' ? island.focus : null;
+  const focusIds = focus ? (focus.raw?.drugs || []).map((d) => d.id) : [];
+
+  const scenarioDrug = entry.profile.scenario ? getDrugById(entry.profile.scenario.add) : null;
+  const scenario = scenarioDrug ? { ...entry.profile.scenario, drug: scenarioDrug } : null;
+  const scenarioReady = scenario && !lines.some((l) => l.drugId === scenario.drug.id);
+  const favorites = FAVORITES.map(getDrugById).filter(Boolean);
+
+  const addDrug = (drug) => {
+    const isScenario = scenario && drug.id === scenario.drug.id;
+    const line = makeRxLine(drug, species, {
+      isNew: true,
+      qty: isScenario ? scenario.qty : undefined,
+      days: isScenario ? scenario.days : undefined,
+    });
+    if (line) updateLines((cur) => (cur.some((l) => l.drugId === line.drugId) ? cur : [...cur, line]));
+  };
+  const runScenario = () => {
+    if (!scenario) return;
+    setTab('rx');
+    addDrug(scenario.drug);
+  };
+
+  const resetPatient = () => {
+    setCharts((c) => ({ ...c, [entry.id]: initialLines(entry) }));
+    setSelectedLine(null);
+    showToast(t.demoX.savedWord, t.demoX.resetDone);
+  };
+  const deleteSelected = () => {
+    if (!selectedLine) return;
+    updateLines((cur) => cur.filter((l) => l.lineId !== selectedLine));
+    setSelectedLine(null);
+  };
+
+  const abnormalLabs = Object.values(entry.profile.labResults).filter((l) => l.status !== 'normal').length;
+  const tabs = [
+    { id: 'soap', label: t.emr.tabs.soap },
+    { id: 'rx', label: t.emr.tabs.rx, count: lines.length + (entry.profile.visit.tx?.length || 0) },
+    { id: 'labs', label: t.emr.tabs.labs, count: abnormalLabs ? `H/L ${abnormalLabs}` : undefined },
+    { id: 'history', label: t.emr.tabs.history },
+  ];
+
+  const today = isoDate();
+  const weekday = new Date().toLocaleDateString(lang === 'ko' ? 'ko-KR' : 'en-US', { weekday: 'short' });
+  const density = mainW >= 960 ? 'wide' : mainW >= 700 ? 'mid' : 'narrow';
+
+  const guideSteps = t.demoX.guideSteps.map((s, i) => ({
+    ...s,
+    target: ['emr', 'island', 'scenario'][i],
+    pad: i === 0 ? 4 : 6,
+    radius: i === 0 ? 4 : 999,
+  }));
+  const startGuide = () => {
+    setSelectedId('golden_retriever');
+    setTab('rx');
+    setGuideStep(0);
+  };
+  const nextGuide = () => {
+    if (guideStep >= guideSteps.length - 1) { setGuideStep(-1); writeGuideDone(); }
+    else setGuideStep((s) => s + 1);
+  };
+  const skipGuide = () => { setGuideStep(-1); writeGuideDone(); };
+
+  const contextFindings = monitor.findings.filter((f) => f.kind !== 'interaction');
+
+  const scenarioButton = (place) => scenario && (
+    <button
+      type="button"
+      data-tour="scenario"
+      data-place={place}
+      onClick={runScenario}
+      disabled={!scenarioReady}
+      className="group inline-flex min-w-0 items-center gap-2.5 rounded-full px-3 py-1.5 text-left ring-1 ring-inset ring-white/15 transition-colors enabled:hover:bg-white/[0.06] enabled:hover:ring-island-info/50 disabled:opacity-45"
+    >
+      <span className="kicker shrink-0 text-[10px] text-island-info">{t.demoX.scenario}</span>
+      <span className="truncate text-[12.5px] font-medium text-white/85">{loc(scenario.hint, lang)}</span>
+      <span aria-hidden="true" className="shrink-0 text-[12.5px] text-white/40 transition-transform group-enabled:group-hover:translate-x-0.5 group-enabled:group-hover:text-white">→</span>
+    </button>
+  );
+
+  return (
+    <div className="flex h-[100dvh] flex-col bg-[#05070D]">
+      {/* nuvoDUR bar — what you are looking at, and how to drive it */}
+      <header className="relative z-30 shrink-0 border-b border-white/[0.07] bg-[#05070D] text-white">
+        <div className="flex h-12 items-center justify-between gap-3 px-2 sm:px-4">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <Link to="/" aria-label={t.demoX.backHome} className="flex h-9 items-center rounded-full px-2.5 text-[13px] text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white">
+              ←<span className="ml-1.5 hidden sm:inline">nuvovet</span>
+            </Link>
+            <span className="h-4 w-px bg-white/15" aria-hidden="true" />
+            <ProductLockup product="dur" size="sm" tone="dark" />
+            <span className="kicker hidden text-[10px] text-white/40 sm:inline">{t.demoX.badge}</span>
+            <span className="ml-2 hidden min-w-0 lg:flex">{scenarioButton('bar')}</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+            <button type="button" onClick={startGuide} className="h-9 rounded-full px-3 text-[12.5px] font-medium text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white">
+              {t.demoX.guide}
+            </button>
+            <LangToggle tone="dark" />
+            <button type="button" onClick={() => setReportOpen(true)} className="hidden h-9 rounded-full px-3 text-[12.5px] font-medium text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:inline-flex sm:items-center">
+              {t.demoX.report}
+            </button>
+            <button type="button" onClick={() => setAccessOpen(true)} className="hidden h-9 items-center rounded-full bg-white px-4 text-[12.5px] font-semibold text-ink-900 transition-colors hover:bg-white/90 md:inline-flex">
+              {t.nav.requestAccess}
+            </button>
+          </div>
+        </div>
+        {scenario && <div className="no-scrollbar flex overflow-x-auto px-2 pb-2 lg:hidden">{scenarioButton('strip')}</div>}
+      </header>
+
+      {/* Stage: the clinic's EMR window, with nuvoDUR docked on top */}
+      <div className="relative flex min-h-0 flex-1 flex-col bg-[radial-gradient(120%_80%_at_50%_0%,#1a2333_0%,#0b111b_45%,#05070D_100%)] sm:px-3 sm:pb-3 sm:pt-6 lg:px-5 lg:pb-4 lg:pt-7">
+        <div
+          data-tour="emr"
+          className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-[#7D8794] bg-emr-bg shadow-[0_30px_80px_-20px_rgba(0,0,0,0.75)] sm:border"
+        >
+          <EmrTitleBar docTitle={`${t.emr.toolbar[1].label} — ${entry.profile.name} (${entry.profile.animalChartId})`} />
+          <div className="hidden sm:block">
+            <EmrMenuBar />
+          </div>
+          <EmrToolbar
+            active="consult"
+            compact={mainW < 900}
+            right={
+              <>
+                <EmrButton onClick={resetPatient} className="hidden md:inline-flex">{t.emr.rx.loadPrev}</EmrButton>
+                <EmrButton onClick={() => setReportOpen(true)} className="sm:hidden">{t.demoX.report}</EmrButton>
+              </>
+            }
+          />
+
+          <div className="flex min-h-0 flex-1 gap-[3px] p-[3px]">
+            <aside className="hidden w-[248px] shrink-0 flex-col gap-[3px] lg:flex">
+              <div className="min-h-0 flex-1">
+                <WaitingList
+                  patients={patients}
+                  selectedId={entry.id}
+                  onSelect={(id) => { setSelectedId(id); setReportOpen(false); }}
+                  dateLabel={`${today} (${weekday})`}
+                />
+              </div>
+              <OwnerPanel entry={entry} />
+            </aside>
+
+            <main ref={mainRef} className="flex min-w-0 flex-1 flex-col gap-[3px]">
+              <PatientInfo
+                entry={entry}
+                patients={patients}
+                onSelectPatient={setSelectedId}
+                density={density}
+                photoSize={density === 'narrow' ? 64 : 84}
+              />
+              <div className="flex min-h-0 flex-1 flex-col border border-emr-line bg-emr-bg">
+                <EmrTabs tabs={tabs} active={tab} onChange={setTab} className="bg-[#E9ECF0]" />
+                <div className="emr-scroll min-h-0 flex-1 overflow-y-auto bg-white p-1.5">
+                  {tab === 'rx' && (
+                    <div className="space-y-1.5">
+                      <VisitStrip entry={entry} dateLabel={today} />
+                      <RxSearch species={species} existingIds={lines.map((l) => l.drugId)} onAdd={addDrug} favorites={favorites} />
+                      <RxGrid
+                        lines={lines}
+                        txItems={entry.profile.visit.tx}
+                        weight={entry.profile.weight}
+                        overlay={overlay}
+                        focusIds={focusIds}
+                        columns={mainW >= 1000 ? 'full' : mainW >= 600 ? 'mid' : 'compact'}
+                        selectedLineId={selectedLine}
+                        onSelectLine={setSelectedLine}
+                        onChange={(lineId, patch) => updateLines((cur) => cur.map((l) => (l.lineId === lineId ? { ...l, ...patch } : l)))}
+                        onRemove={(lineId) => updateLines((cur) => cur.filter((l) => l.lineId !== lineId))}
+                      />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <EmrButton onClick={() => document.getElementById('rx-search')?.focus()}>{t.emr.rx.addRow}</EmrButton>
+                        <EmrButton onClick={deleteSelected} disabled={!selectedLine}>{t.emr.rx.deleteRow}</EmrButton>
+                        <EmrButton onClick={resetPatient} className="md:hidden">{t.emr.rx.loadPrev}</EmrButton>
+                        <span className="ml-auto" />
+                        <EmrButton onClick={() => showToast(t.demoX.noteWord, t.demoX.printDisabled, 'info')}>{t.emr.rx.print}</EmrButton>
+                        <EmrButton primary onClick={() => showToast(t.demoX.savedWord, t.demoX.saved)}>{t.emr.rx.save}</EmrButton>
+                      </div>
+                      <RxMemo entry={entry} />
+                      <RxHistory entry={entry} />
+                    </div>
+                  )}
+                  {tab === 'soap' && <SoapPanel entry={entry} dateLabel={today} />}
+                  {tab === 'labs' && <LabsPanel entry={entry} dateLabel={today} />}
+                  {tab === 'history' && <HistoryPanel entry={entry} />}
+                </div>
+              </div>
+            </main>
+          </div>
+
+          <EmrStatusBar clock={clock} patientsToday={patients.length} />
+        </div>
+
+        {/* nuvoDUR island — docked across the EMR window's top edge */}
+        <div className="pointer-events-none absolute inset-x-0 top-[3px] z-40 flex justify-center px-2 sm:top-[6px] lg:top-[7px]">
+          <div className="pointer-events-auto" data-tour="island">
+            <DurIsland {...island} onOpenReport={() => setReportOpen(true)} />
+          </div>
+        </div>
+      </div>
+
+      {toast && (
+        <div role="status" className="fixed bottom-8 left-1/2 z-[70] flex -translate-x-1/2 animate-sheet-up items-center gap-3 whitespace-nowrap rounded-full bg-island-bg px-4 py-2.5 text-[13px] text-white shadow-island ring-1 ring-white/10">
+          <span className={`kicker text-[10.5px] ${toast.tone === 'info' ? 'text-island-info' : 'text-island-clear'}`}>{toast.word}</span>
+          <span className="text-white/85">{toast.msg}</span>
+        </div>
       )}
+
+      <ReportSheet
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        entry={entry}
+        analysis={monitor.analysis}
+        drugs={drugs}
+        contextFindings={contextFindings}
+      />
+      <RequestAccessModal isOpen={accessOpen} onClose={() => setAccessOpen(false)} />
+      {guideStep >= 0 && <Guide step={guideStep} steps={guideSteps} onNext={nextGuide} onSkip={skipGuide} />}
     </div>
   );
 }
