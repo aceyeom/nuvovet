@@ -8,6 +8,7 @@ import { ResultsDisplay } from '../components/ResultsDisplay';
 import { RequestAccessModal } from '../components/RequestAccessModal';
 import { EMRImportModal } from '../components/EMRImportModal';
 import { WorkspaceHeader, FormularyStatus } from '../components/Layout/Header';
+import { usePageCanvas, CANVAS } from '../lib/usePageCanvas';
 import { runFullDURAnalysis } from '../utils/durEngine';
 import { searchDrugsApi, isBackendAvailable, getBreedsApi, getConditionsApi, getAllergiesApi } from '../lib/api';
 import { searchPatients, savePatient, addVisitRecord, getPatientById } from '../lib/patientStorage';
@@ -415,6 +416,7 @@ function PasswordGate({ onAuthenticate }) {
 
 // ── Full System Main ──────────────────────────────────────────────
 export default function FullSystem() {
+  usePageCanvas(CANVAS.light);
   const navigate = useNavigate();
   const location = useLocation();
   const { t, lang } = useI18n();

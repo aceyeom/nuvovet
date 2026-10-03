@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useI18n } from '../i18n';
 import { RequestAccessModal } from '../components/RequestAccessModal';
+import { usePageCanvas, CANVAS } from '../lib/usePageCanvas';
 import { SiteNav, SiteFooter } from '../components/landing/SiteChrome';
 import { Hero } from '../components/landing/Hero';
 import {
@@ -17,6 +18,7 @@ import {
 // ──────────────────────────────────────────────────────────────────
 
 export default function Landing() {
+  usePageCanvas(CANVAS.dark);
   const [access, setAccess] = useState({ open: false, product: 'dur' });
   const openAccess = (product = 'dur') => setAccess({ open: true, product });
 

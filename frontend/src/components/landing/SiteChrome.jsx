@@ -159,7 +159,7 @@ export function SiteNav({ onRequestAccess }) {
           </a>
           <a href="#claims" className={cx(LINK, 'gap-2 font-semibold text-white/90')}>
             <ProductName product="claims" tone="dark" />
-            <span className="kicker text-[9.5px] font-medium text-white/35">{N.soon}</span>
+            <span className="kicker text-[9.5px] font-medium text-white/35">{L.claimsStatus}</span>
           </a>
           <span aria-hidden="true" className="mx-2.5 h-4 w-px bg-white/15" />
           <a href="#how" className={LINK}>{N.how}</a>

@@ -59,7 +59,8 @@ export function Hero({ onRequestAccess }) {
     <section
       ref={sectionRef}
       id="hero"
-      className={`relative isolate overflow-hidden bg-[#03050A] text-white ${active ? '' : 'hero-paused'}`}
+      // -mt-16 pt-16: the stage runs up behind the transparent sticky nav
+      className={`relative isolate -mt-16 overflow-hidden bg-[#03050A] pt-16 text-white ${active ? '' : 'hero-paused'}`}
     >
       <HeroBackdrop active={active} reduced={reduced} />
 

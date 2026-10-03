@@ -73,7 +73,8 @@ function TextBtn({ onClick, label, children, disabled, className = '' }) {
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className={`kicker kicker-tight h-7 rounded-md px-1.5 text-[10.5px] text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white disabled:opacity-30 ${className}`}
+      // 28px to the eye, 40px to a finger
+      className={`kicker kicker-tight relative h-7 min-w-[26px] rounded-md px-2 text-[10.5px] text-white/45 transition-colors after:absolute after:-inset-x-0.5 after:-inset-y-1.5 hover:bg-white/[0.07] hover:text-white disabled:opacity-30 ${className}`}
     >
       {children}
     </button>
@@ -82,7 +83,7 @@ function TextBtn({ onClick, label, children, disabled, className = '' }) {
 
 function ReportLink({ onClick, label }) {
   return (
-    <button type="button" onClick={onClick} className="group inline-flex items-center gap-1.5 text-[12.5px] font-medium text-white/55 transition-colors hover:text-white">
+    <button type="button" onClick={onClick} className="group relative inline-flex items-center gap-1.5 text-[12.5px] font-medium text-white/55 transition-colors after:absolute after:-inset-x-1.5 after:-inset-y-2 hover:text-white">
       {label}
       <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
     </button>
@@ -250,7 +251,7 @@ function ExpandedView({ focus, width, labels, onNav, onResolve, onAck, onCollaps
                   type="button"
                   data-island-action="resolve"
                   onClick={() => onResolve(focus.id)}
-                  className={`inline-flex h-8 items-center rounded-full bg-white px-4 text-[12.5px] font-semibold text-ink-900 transition-transform hover:scale-[1.03] active:scale-[0.97] ${highlightAction === 'resolve' ? 'scale-[0.97] ring-4 ring-white/25' : ''}`}
+                  className={`relative inline-flex h-8 items-center rounded-full bg-white px-4 text-[12.5px] font-semibold text-ink-900 transition-transform after:absolute after:-inset-y-1 after:inset-x-0 hover:scale-[1.03] active:scale-[0.97] ${highlightAction === 'resolve' ? 'scale-[0.97] ring-4 ring-white/25' : ''}`}
                 >
                   {focus.verb}
                 </button>
@@ -260,7 +261,7 @@ function ExpandedView({ focus, width, labels, onNav, onResolve, onAck, onCollaps
                   type="button"
                   data-island-action="ack"
                   onClick={() => onAck(focus.id)}
-                  className={`inline-flex h-8 items-center rounded-full px-3.5 text-[12.5px] font-semibold transition-colors ${focus.hasResolution ? 'text-white/75 ring-1 ring-inset ring-white/15 hover:bg-white/[0.07] hover:text-white' : 'bg-white text-ink-900 hover:bg-white/90'}`}
+                  className={`relative inline-flex h-8 items-center rounded-full px-3.5 text-[12.5px] font-semibold transition-colors after:absolute after:-inset-y-1 after:inset-x-0 ${focus.hasResolution ? 'text-white/75 ring-1 ring-inset ring-white/15 hover:bg-white/[0.07] hover:text-white' : 'bg-white text-ink-900 hover:bg-white/90'}`}
                 >
                   {labels.acknowledge}
                 </button>

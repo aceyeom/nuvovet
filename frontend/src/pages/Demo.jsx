@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ProductLockup } from '../components/NuvovetLogo';
 import { DurIsland } from '../components/dur/DurIsland';
 import { useDurMonitor } from '../components/dur/useDurMonitor';
@@ -15,6 +15,7 @@ import { getDemoPatients } from '../data/breedProfiles';
 import { getDrugById } from '../data/drugDatabase';
 import { makeRxLine } from '../data/emrCatalog';
 import { useI18n, LangToggle } from '../i18n';
+import { usePageCanvas, CANVAS } from '../lib/usePageCanvas';
 
 // ──────────────────────────────────────────────────────────────────
 // /demo — nuvoDUR on top of a simulated clinic EMR.
@@ -200,9 +201,15 @@ function ReportSheet({ open, onClose, entry, analysis, drugs, contextFindings })
 
 // ── Page ─────────────────────────────────────────────────────────
 export default function Demo() {
+  usePageCanvas(CANVAS.dark);
   const { t, lang } = useI18n();
   const patients = useMemo(() => getDemoPatients(), []);
-  const [selectedId, setSelectedId] = useState('golden_retriever');
+  // /demo?patient=<id> opens straight on that chart (linked from the landing page)
+  const [searchParams] = useSearchParams();
+  const [selectedId, setSelectedId] = useState(() => {
+    const id = searchParams.get('patient');
+    return patients.some((e) => e.id === id) ? id : 'golden_retriever';
+  });
   const [charts, setCharts] = useState(() => Object.fromEntries(patients.map((e) => [e.id, initialLines(e)])));
   const [tab, setTab] = useState('rx');
   const [selectedLine, setSelectedLine] = useState(null);

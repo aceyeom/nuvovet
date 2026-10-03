@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { WorkspaceHeader } from '../components/Layout/Header';
+import { usePageCanvas, CANVAS } from '../lib/usePageCanvas';
 import { severityTone, severityWord } from '../components/SeverityBadge';
 import { getDrugById } from '../data/drugDatabase';
 import {
@@ -277,6 +278,7 @@ function PatientDetail({ patient, onBack, onUpdate, onDelete, onStartVisit }) {
 
 // ── Main Patients Page ────────────────────────────────────────────
 export default function Patients() {
+  usePageCanvas(CANVAS.light);
   const navigate = useNavigate();
   const { t } = useI18n();
   const F = t.fullSystem;

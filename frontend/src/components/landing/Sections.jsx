@@ -968,7 +968,7 @@ export function Coverage() {
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-ink-900/20">
-                  <th scope="col" className="w-12 pb-3 font-mono text-[10.5px] font-normal text-ink-400">#</th>
+                  <th scope="col" className="w-12 pb-3 text-left font-normal"><Kicker as="span" className="text-[10.5px] text-ink-400">#</Kicker></th>
                   <th scope="col" className="pb-3 pr-6"><Kicker as="span" className="text-[10.5px] text-ink-400">{L.pipelineCols.case}</Kicker></th>
                   <th scope="col" className="hidden pb-3 sm:table-cell"><Kicker as="span" className="text-[10.5px] text-ink-400">{L.pipelineCols.handling}</Kicker></th>
                 </tr>
@@ -1203,10 +1203,17 @@ export function DemoBand() {
               </div>
               <div role="rowgroup">
                 {patients.map((e) => (
-                  <div key={e.id} role="row" className={cx(cols, 'items-baseline border-b border-white/[0.08] py-3.5')}>
+                  // the whole row opens that patient's chart in the demo
+                  <div key={e.id} role="row" className={cx(cols, 'relative items-baseline border-b border-white/[0.08] py-3.5 transition-colors hover:bg-white/[0.03]')}>
                     <span role="cell" className="font-mono text-[12.5px] text-white/45 tnum">{e.profile.visit.time}</span>
                     <span role="cell" className="min-w-0 truncate text-[15px] font-medium text-white">
-                      {patientName(e, lang)}
+                      <Link
+                        to={`/demo?patient=${e.id}`}
+                        aria-label={L.demoListOpen.replace('{name}', patientName(e, lang))}
+                        className="underline-offset-4 after:absolute after:inset-0 hover:underline focus-visible:outline-none focus-visible:after:ring-1 focus-visible:after:ring-inset focus-visible:after:ring-island-info/70"
+                      >
+                        {patientName(e, lang)}
+                      </Link>
                       <span className="ml-2 text-[12.5px] font-normal text-white/40 sm:hidden">{breedName(e, lang)} · {e.profile.weight} kg</span>
                     </span>
                     <span role="cell" className="hidden min-w-0 truncate text-[14px] text-white/55 sm:block">{breedName(e, lang)}</span>

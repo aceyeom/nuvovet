@@ -960,13 +960,3 @@ export function HistoryPanel({ entry }) {
     </div>
   );
 }
-
-// ── Deprecated aliases (removed once the demo and hero migrate) ──
-export const PatientBanner = (props) => <PatientInfo {...props} />;
-export const RxTable = ({ drugTone, ...props }) => <RxGrid overlay={drugTone} {...props} />;
-export const VitalsStrip = VitalsRow;
-export const PatientAvatar = PatientPhoto;
-export function RxToolbar() { return null; }
-export function DurDot() { return null; }
-export function StatusChip() { return null; }
-export function ReportLink() { return null; }

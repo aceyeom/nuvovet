@@ -39,7 +39,6 @@ const ko = {
     demo: '라이브 데모',
     menu: '메뉴',
     close: '메뉴 닫기',
-    soon: '출시 예정',
     demoDesc: '시뮬레이션 EMR에서 nuvoDUR 체험 · 로그인 불필요',
     signInDesc: '접근 코드가 있는 병원용 전체 시스템',
     accessDesc: '우리 병원 계정 발급 신청',
@@ -215,6 +214,7 @@ const ko = {
     demoBandDesc: '환자 7명, 실제 국내 EMR 항목, 그리고 모든 변경에 실시간으로 반응하는 nuvoDUR. 로그인 없이 바로.',
     demoBandPoints: ['오늘의 대기 환자 선택', '처방 추가·수정', '아일랜드 반응 확인'],
     demoListTitle: '오늘의 진료대기',
+    demoListOpen: '데모에서 {name} 차트 열기',
     demoListCols: { time: '시간', patient: '환자', breed: '품종', weight: 'kg', case: '케이스 포인트' },
     demoBandNote: '로그인 없음 · 한국어 / English',
 
@@ -919,7 +919,7 @@ const ko = {
 
   requestAccess: {
     kickerAccess: '도입 신청',
-    kickerWaitlist: '출시 예정',
+    kickerWaitlist: '개발 중',
     title: '병원 워크스페이스 신청',
     desc: '병원 정보를 남겨 주시면 1~2영업일 내에 워크스페이스 계정을 보내 드립니다.',
     waitlistTitle: '대기자 등록',

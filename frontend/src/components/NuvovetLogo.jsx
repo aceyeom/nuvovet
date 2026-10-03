@@ -93,18 +93,3 @@ export function BrandText({ children, tone = 'light' }) {
     : part,
   );
 }
-
-// ── Deprecated shims (removed once every screen has migrated) ─────
-// The dog mark and the glyph/tag chips are gone from the brand. These
-// keep old imports compiling during the migration and render nothing
-// dog-shaped.
-export const DOG_PATH = '';
-export function NuvovetMark() { return null; }
-export function NuvovetLogo() { return null; }
-export function NuvovetBrand({ size = 26, tone = 'light', className = '' }) {
-  return <NuvovetWordmark height={Math.round(size * 0.62)} className={`${tone === 'dark' ? 'text-white' : 'text-ink-900'} ${className}`} />;
-}
-export function ProductGlyph() { return null; }
-export function ProductTag({ product = 'dur', className = '' }) {
-  return <ProductLockup product={product} size="sm" className={className} />;
-}

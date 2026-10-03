@@ -38,7 +38,6 @@ const en = {
     demo: 'Live demo',
     menu: 'Menu',
     close: 'Close menu',
-    soon: 'Soon',
     demoDesc: 'nuvoDUR on a simulated EMR · no login',
     signInDesc: 'Full system for clinics with an access code',
     accessDesc: 'Get credentials for your clinic',
@@ -214,6 +213,7 @@ const en = {
     demoBandDesc: 'Seven patients, real Korean EMR fields, and nuvoDUR reacting live to every change you make. No login.',
     demoBandPoints: ['Pick a patient from today’s list', 'Add or edit a prescription', 'Watch the island react'],
     demoListTitle: 'Today’s list',
+    demoListOpen: 'Open {name}’s chart in the demo',
     demoListCols: { time: 'Time', patient: 'Patient', breed: 'Breed', weight: 'kg', case: 'Teaching point' },
     demoBandNote: 'No login · 한국어 / English',
 
@@ -903,7 +903,7 @@ const en = {
 
   requestAccess: {
     kickerAccess: 'Access request',
-    kickerWaitlist: 'Coming soon',
+    kickerWaitlist: 'In development',
     title: 'Get the clinic workspace',
     desc: 'Tell us about your clinic and we’ll send workspace credentials within 1–2 business days.',
     waitlistTitle: 'Join the waitlist',

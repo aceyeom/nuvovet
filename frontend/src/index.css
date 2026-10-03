@@ -28,6 +28,8 @@
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
+  /* --page-canvas: set per route (index.html, usePageCanvas) */
+  background-color: var(--page-canvas, #ffffff);
 }
 
 body {
@@ -36,7 +38,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-feature-settings: 'ss06' 1; /* Pretendard: disambiguated l / I */
-  background-color: #ffffff;
+  background-color: var(--page-canvas, #ffffff);
   color: #0b1220;
 }
 
